@@ -1,0 +1,30 @@
+# --- Semua perintah akan dijalankan sebagai Administrator dan berurutan ---
+# --- Harap Tunggu Proses Maintenance Hingga Selesai, Jangan Mematikan Komputer Ini ---
+
+# 1. System File Checker
+Start-Process cmd.exe -ArgumentList "/c sfc /scannow" -Verb RunAs -Wait
+
+# 2. DISM - CheckHealth
+Start-Process cmd.exe -ArgumentList "/c DISM /Online /Cleanup-Image /CheckHealth" -Verb RunAs -Wait
+
+# 3. DISM - ScanHealth
+Start-Process cmd.exe -ArgumentList "/c DISM /Online /Cleanup-Image /ScanHealth" -Verb RunAs -Wait
+
+# 4. DISM - RestoreHealth
+Start-Process cmd.exe -ArgumentList "/c DISM /Online /Cleanup-Image /RestoreHealth" -Verb RunAs -Wait
+
+# 5. Flush DNS
+Start-Process cmd.exe -ArgumentList "/c ipconfig /flushdns" -Verb RunAs -Wait
+
+# --- Bagian perintah yang butuh restart ---
+Write-Host "`n=== Perintah yang butuh restart akan dijalankan terakhir ===" -ForegroundColor Cyan
+
+# 6. Chkdsk (jadwal saat restart)
+Start-Process cmd.exe -ArgumentList "/c echo Y|chkdsk C: /F /R" -Verb RunAs -Wait
+
+# 7. Reset Winsock
+Start-Process cmd.exe -ArgumentList "/c netsh winsock reset" -Verb RunAs -WindowStyle Hidden -Wait
+
+# 8. Tes RAM
+Start-Process cmd.exe -ArgumentList "/c schtasks /Create /TN MemTest /SC ONSTART /TR mdsched.exe /F" -Verb RunAs -Wait
+Start-Process cmd.exe -ArgumentList "/c shutdown /r /t 0" -Verb RunAs -Wait
