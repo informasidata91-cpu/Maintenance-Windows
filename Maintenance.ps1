@@ -56,4 +56,5 @@ Write-Output "Komputer akan restart dalam 30 detik..."
 Stop-Transcript
 
 # Restart otomatis
-Run-AdminCommand "shutdown /r /t 30 /c `"Maintenance Windows selesai. Komputer akan restart otomatis.`""
+Start-Sleep -Seconds 5
+shutdown.exe /r /t 30 /c "Maintenance Windows selesai. Komputer akan restart otomatis."
