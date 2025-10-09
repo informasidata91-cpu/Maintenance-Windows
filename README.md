@@ -16,15 +16,17 @@ ________________________________________
 3.	Flush DNS  
     Membersihkan cache DNS untuk memperbaiki masalah konektivitas atau resolusi nama domain.  
 4.	Reset Winsock  
-    Mereset konfigurasi jaringan Windows untuk menyelesaikan masalah koneksi.  
-5.	CHKDSK  
+    Mereset konfigurasi jaringan Windows untuk menyelesaikan masalah koneksi.
+5.  Disk Cleanup – Drive C  
+    Fungsi ini digunakan untuk membersihkan file-file sementara dan sisa sistem pada Drive C: secara otomatis. Tujuannya adalah untuk mengosongkan ruang penyimpanan, meningkatkan performa sistem, serta menjaga kestabilan Windows.
+6.	CHKDSK  
     Memeriksa integritas drive C: dan secara otomatis menjadwalkan perbaikan bila ditemukan masalah.  
-6.	Memory Diagnostic  
+7.	Memory Diagnostic  
     Menjadwalkan Windows Memory Diagnostic untuk dijalankan saat restart.  
-7.	Logging Otomatis  
+8.	Logging Otomatis  
     Semua output perintah disimpan di:  
     C:\MaintenanceLog.txt  
-8.	Restart Otomatis  
+9.	Restart Otomatis  
     Setelah semua langkah selesai, komputer akan restart dalam 30 detik dengan pesan:  
 10.	Maintenance Windows selesai. Komputer akan restart otomatis.  
 ________________________________________
