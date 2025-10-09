@@ -1,12 +1,12 @@
-Windows Maintenance Script - Silent Automated Mode  
+# Windows Maintenance Script - Silent Automated Mode  
 ________________________________________
-Deskripsi  
+## Deskripsi  
 Skrip ini dirancang untuk melakukan perawatan sistem Windows secara otomatis dan silent.  
 Menggabungkan beberapa perintah penting untuk memastikan integritas file sistem, kesehatan image Windows, jaringan, dan memori.  
 Setelah skrip selesai, komputer akan melakukan restart otomatis.  
 Skrip ini cocok untuk administrator atau pengguna yang ingin melakukan maintenance rutin tanpa interaksi manual.  
 ________________________________________
-Fitur Utama  
+## Fitur Utama  
 1.	System File Checker (SFC)  
     Memeriksa dan memperbaiki file sistem Windows yang rusak.  
 2.	DISM (Deployment Image Servicing and Management) – 3-Step  
@@ -28,7 +28,7 @@ Fitur Utama
     Setelah semua langkah selesai, komputer akan restart dalam 30 detik dengan pesan:  
 10.	Maintenance Windows selesai. Komputer akan restart otomatis.  
 ________________________________________
-Cara Penggunaan  
+## Cara Penggunaan  
 1.	Simpan skrip sebagai WindowsMaintenance.ps1.  
 2.	Jalankan PowerShell sebagai Administrator.  
 3.	Eksekusi skrip:  
@@ -36,12 +36,12 @@ Cara Penggunaan
 5.	Tunggu proses selesai — skrip akan menampilkan log di layar dan di C:\MaintenanceLog.txt.  
 6.	Komputer akan otomatis restart untuk menyelesaikan CHKDSK dan Memory Diagnostic.  
 ________________________________________  
-Catatan Penting  
+## Catatan Penting  
 1. Pastikan PowerShell dijalankan dengan hak administrator, jika tidak beberapa langkah seperti DISM dan CHKDSK akan gagal.  
 2. CHKDSK hanya akan dijalankan jika ditemukan kerusakan pada drive.  
 3. Windows Memory Diagnostic dijadwalkan untuk ONSTART, sehingga akan berjalan saat komputer berikutnya booting.  
 4. Skrip ini tidak menghapus file pengguna.  
 ________________________________________
-Disclaimer  
+## Disclaimer  
 Skrip ini dibuat untuk perawatan rutin sistem. Gunakan dengan hati-hati pada komputer yang sedang digunakan untuk pekerjaan penting karena akan restart otomatis.  
 Backup data penting selalu disarankan sebelum melakukan perawatan sistem.  
