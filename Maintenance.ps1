@@ -6,6 +6,10 @@ $LogFile = "$env:SystemDrive\MaintenanceLog.txt"
 Start-Transcript -Path $LogFile -Append
 
 Write-Output "=== MEMULAI PROSES MAINTENANCE WINDOWS (Admin Mode) ==="
+Write-Output "⚠️ PERINGATAN:"
+Write-Output "Jangan menutup jendela PowerShell atau CMD ini!"
+Write-Output "Sistem sedang menjalankan proses Maintenance Windows otomatis."
+Write-Output "Menutup jendela ini dapat menyebabkan proses gagal atau sistem tidak stabil."
 
 # Fungsi helper untuk menjalankan perintah sebagai admin dan hidden
 function Run-AdminCommand {
@@ -71,6 +75,7 @@ Stop-Transcript
 # Restart otomatis
 Start-Sleep -Seconds 5
 shutdown.exe /r /t 30 /c "Maintenance Windows selesai. Komputer akan restart otomatis."
+
 
 
 
