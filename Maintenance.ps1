@@ -37,8 +37,8 @@ Run-AdminCommand "ipconfig /flushdns | Out-Null"
 Write-Output "[6/9] Mereset Winsock..."
 Run-AdminCommand "netsh winsock reset | Out-Null"
 
-# --- 7. Disk Cleanup - Drive C (Silent Mode) ---
-Write-Output "[7/9] Menjalankan Disk Cleanup untuk drive C (Silent Mode)..."
+# --- 7. Disk Cleanup - Drive C ---
+Write-Output "[7/9] Menjalankan Disk Cleanup untuk drive C ..."
 
 # Hapus temporary files, recycle bin, dan delivery optimization cache
 Run-AdminCommand "cmd /c cleanmgr /d C: /verylowdisk | Out-Null"
@@ -71,6 +71,7 @@ Stop-Transcript
 # Restart otomatis
 Start-Sleep -Seconds 5
 shutdown.exe /r /t 30 /c "Maintenance Windows selesai. Komputer akan restart otomatis."
+
 
 
 
