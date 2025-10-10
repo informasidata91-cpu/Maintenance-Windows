@@ -1,10 +1,7 @@
 # Windows Maintenance Script - Silent Automated Mode  
 ________________________________________
 ## Deskripsi  
-Skrip ini dirancang untuk melakukan perawatan sistem Windows secara otomatis dan silent.  
-Menggabungkan beberapa perintah penting untuk memastikan integritas file sistem, kesehatan image Windows, jaringan, dan memori.  
-Setelah skrip selesai, komputer akan melakukan restart otomatis.  
-Skrip ini cocok untuk administrator atau pengguna yang ingin melakukan maintenance rutin tanpa interaksi manual.  
+Skrip ini dirancang untuk melakukan perawatan sistem Windows secara otomatis dan silent. Menggabungkan beberapa perintah penting untuk memastikan integritas file sistem, kesehatan image Windows, jaringan, dan memori. Setelah skrip selesai, komputer akan melakukan restart otomatis. Skrip ini cocok untuk administrator atau pengguna yang ingin melakukan maintenance rutin tanpa interaksi manual.  
 ________________________________________
 ## Fitur Utama  
 1.	System File Checker (SFC)  
