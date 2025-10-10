@@ -35,7 +35,8 @@ ________________________________________
 2.	Jalankan PowerShell sebagai Administrator.  
 3.	Eksekusi skrip:  
     ```powershell
-  	Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force  
+  	Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+    if (Test-Path "Maintenance.ps1") { Remove-Item "Maintenance.ps1" -Force }  
     Invoke-WebRequest "https://raw.githubusercontent.com/informasidata91-cpu/Maintenance-Windows/main/Maintenance.ps1" -OutFile "Maintenance.ps1"  
     ./Maintenance.ps1  
 5.	Tunggu proses selesai — skrip akan menampilkan log di layar dan di C:\MaintenanceLog.txt.  
