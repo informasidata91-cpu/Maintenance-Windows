@@ -28,7 +28,7 @@ ________________________________________
     C:\MaintenanceLog.txt  
 9.	Restart Otomatis  
     Setelah semua langkah selesai, komputer akan restart dalam 30 detik dengan pesan:  
-10.	Maintenance Windows selesai. Komputer akan restart otomatis.  
+    "Maintenance Windows selesai. Komputer akan restart otomatis."  
 ________________________________________
 ## Cara Penggunaan  
 1.	Simpan skrip sebagai Maintenance.ps1.  
