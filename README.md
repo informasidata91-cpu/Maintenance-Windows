@@ -31,7 +31,7 @@ ________________________________________
 10.	Maintenance Windows selesai. Komputer akan restart otomatis.  
 ________________________________________
 ## Cara Penggunaan  
-1.	Simpan skrip sebagai WindowsMaintenance.ps1.  
+1.	Simpan skrip sebagai Maintenance.ps1.  
 2.	Jalankan PowerShell sebagai Administrator.  
 3.	Eksekusi skrip:  
     ```powershell
