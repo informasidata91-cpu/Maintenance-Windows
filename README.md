@@ -37,7 +37,8 @@ ________________________________________
     ```powershell
   	Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
     Invoke-WebRequest "https://raw.githubusercontent.com/informasidata91-cpu/Maintenance-Windows/main/Maintenance.ps1" -OutFile "Maintenance.ps1"  
-    ./Maintenance.ps1  
+    ./Maintenance.ps1
+    
 5.	Tunggu proses selesai — skrip akan menampilkan log di layar dan di C:\MaintenanceLog.txt.  
 6.	Komputer akan otomatis restart untuk menyelesaikan CHKDSK dan Memory Diagnostic.  
 ________________________________________  
