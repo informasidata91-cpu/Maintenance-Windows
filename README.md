@@ -46,5 +46,4 @@ ________________________________________
 4. Skrip ini tidak menghapus file pengguna.  
 ________________________________________
 ## Disclaimer  
-Skrip ini dibuat untuk perawatan rutin sistem. Gunakan dengan hati-hati pada komputer yang sedang digunakan untuk pekerjaan penting karena akan restart otomatis.  
-Backup data penting selalu disarankan sebelum melakukan perawatan sistem.  
+Skrip ini dibuat untuk perawatan rutin sistem. Gunakan dengan hati-hati pada komputer yang sedang digunakan untuk pekerjaan penting karena akan restart otomatis. Backup data penting selalu disarankan sebelum melakukan perawatan sistem.  
