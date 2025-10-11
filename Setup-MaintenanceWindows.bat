@@ -4,60 +4,35 @@
 :: Deskripsi:
 :: - Mengunduh skrip PowerShell diagnostik dari GitHub
 :: - Menjalankannya melalui PowerShell
-:: - Membuat jadwal bulanan otomatis di Task Scheduler
 :: ==========================================================
 
-setlocal
-set "SCRIPT_DIR=%~dp0"
-set "TEMP_SCRIPT=%SCRIPT_DIR%Perintah-Diagnostik-Temp.ps1"
-set "TASK_NAME=Maintenance-Windows-Bulanan"
-set "GITHUB_URL=https://raw.githubusercontent.com/informasidata91-cpu/Maintenance-Windows/main/Perintah-Diagnostik-Windows.txt"
+@echo off
+:: ================================
+:: Maintenance Windows Auto Script
+:: ================================
 
-echo ==========================================================
-echo [INFO] Menjalankan Setup Maintenance Windows
-echo ==========================================================
-echo.
-
-:: === 1. Unduh file PowerShell dari GitHub ===
-echo [INFO] Mengunduh perintah PowerShell terbaru dari GitHub...
-powershell -Command "(New-Object Net.WebClient).DownloadFile('%GITHUB_URL%', '%TEMP_SCRIPT%')" 2>nul
-
-if not exist "%TEMP_SCRIPT%" (
-    echo [ERROR] Gagal mengunduh file dari GitHub.
-    echo Pastikan koneksi internet aktif dan URL benar.
-    pause
+:: Cek apakah dijalankan sebagai Administrator
+net session >nul 2>&1
+if %errorlevel% neq 0 (
+    echo [!] Script ini memerlukan hak Administrator.
+    echo     Membuka ulang dengan hak admin...
+    powershell -Command "Start-Process '%~f0' -Verb RunAs"
     exit /b
 )
-echo [OK] File PowerShell berhasil diunduh.
+
+:: Set Execution Policy sementara
+powershell -Command "Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force"
+
+:: Unduh file Maintenance.ps1 dari GitHub
+powershell -Command "Invoke-WebRequest 'https://raw.githubusercontent.com/informasidata91-cpu/Maintenance-Windows/main/Maintenance.ps1' -OutFile 'Maintenance.ps1'"
+
+:: Jalankan Maintenance.ps1
+powershell -ExecutionPolicy Bypass -File "Maintenance.ps1"
+
 echo.
-
-:: === 2. Jalankan PowerShell script ===
-echo [INFO] Menjalankan perintah diagnostik (PowerShell)...
-powershell -ExecutionPolicy Bypass -File "%TEMP_SCRIPT%"
-echo.
-echo [OK] Semua perintah PowerShell telah dijalankan.
-echo.
-
-:: === 3. Buat jadwal bulanan otomatis ===
-schtasks /Query /TN "%TASK_NAME%" >nul 2>&1
-if %errorlevel%==0 (
-    echo [INFO] Jadwal sudah ada. Tidak perlu membuat ulang.
-    goto :DONE
-)
-
-echo [INFO] Membuat jadwal otomatis bulanan...
-schtasks /Create /SC MONTHLY /D 1 /ST 09:00 /RL HIGHEST /TN "%TASK_NAME%" /TR "powershell -ExecutionPolicy Bypass -File \"%~f0\"" /F >nul
-
-if %errorlevel%==0 (
-    echo [OK] Jadwal berhasil dibuat: Setiap tanggal 1 pukul 09:00 pagi.
-) else (
-    echo [ERROR] Gagal membuat jadwal otomatis.
-)
-
-:DONE
-echo.
-echo ==========================================================
-echo [SELESAI] Setup Maintenance Windows selesai dijalankan.
-echo ==========================================================
+echo ================================
+echo  Maintenance script selesai.
+echo ================================
 pause
+
 exit /b
