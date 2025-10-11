@@ -41,16 +41,38 @@ Run-AdminCommand "ipconfig /flushdns | Out-Null"
 Write-Output "[6/9] Mereset Winsock..."
 Run-AdminCommand "netsh winsock reset | Out-Null"
 
-# --- 7. Disk Cleanup - Drive C ---
+# --- 7. Deep Disk Cleanup - Drive C ---
 Write-Output "[7/9] Menjalankan Disk Cleanup untuk drive C ..."
 
-# Hapus temporary files, recycle bin, dan delivery optimization cache
-Run-AdminCommand "cmd /c cleanmgr /d C: /verylowdisk | Out-Null"
+# Jalankan Disk Cleanup dengan semua opsi pembersihan (SageSet 65535)
+Run-AdminCommand "cmd /c cleanmgr /sageset:65535 & cleanmgr /sagerun:65535"
 
-# Alternatif tambahan (opsional)
+# Bersihkan folder sementara pengguna dan sistem
 Run-AdminCommand "cmd /c del /q /f /s %TEMP%\*"
 Run-AdminCommand "cmd /c del /q /f /s C:\Windows\Temp\*"
-Run-AdminCommand "cmd /c PowerShell -Command ""Clear-RecycleBin -Force"" | Out-Null"
+
+# Bersihkan cache Windows Update
+Run-AdminCommand "cmd /c net stop wuauserv"
+Run-AdminCommand "cmd /c net stop bits"
+Run-AdminCommand "cmd /c del /q /f /s C:\Windows\SoftwareDistribution\Download\*"
+Run-AdminCommand "cmd /c net start wuauserv"
+Run-AdminCommand "cmd /c net start bits"
+
+# Bersihkan Delivery Optimization cache
+Run-AdminCommand "cmd /c del /q /f /s C:\Windows\SoftwareDistribution\DeliveryOptimization\*"
+
+# Bersihkan log dan Prefetch
+Run-AdminCommand "cmd /c del /q /f /s C:\Windows\Prefetch\*"
+Run-AdminCommand "cmd /c del /q /f /s C:\Windows\Logs\CBS\*"
+Run-AdminCommand "cmd /c del /q /f /s C:\Windows\Logs\DISM\*"
+
+# Bersihkan recycle bin
+Run-AdminCommand "PowerShell -Command ""Clear-RecycleBin -Force"""
+
+# Hapus file upgrade lama (Windows.old)
+if (Test-Path "C:\Windows.old") {
+    Run-AdminCommand "cmd /c rmdir /s /q C:\Windows.old"
+}
 
 Write-Output "[OK] Disk Cleanup drive C selesai."
 
@@ -75,6 +97,7 @@ Stop-Transcript
 # Restart otomatis
 Start-Sleep -Seconds 5
 shutdown.exe /r /t 30 /c "Maintenance Windows selesai. Komputer akan restart otomatis."
+
 
 
 
