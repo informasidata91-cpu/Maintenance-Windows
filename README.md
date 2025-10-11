@@ -1,4 +1,10 @@
 # Windows Maintenance Script - Silent Automated Mode  
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Build Status](https://img.shields.io/badge/Status-Stable-success.svg)](https://github.com/informasidata91-cpu/Maintenance-Windows)
+[![Made with PowerShell](https://img.shields.io/badge/Made%20with-PowerShell-5391FE.svg)](https://learn.microsoft.com/en-us/powershell/)
+![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-blue.svg)
+![Version](https://img.shields.io/badge/Version-1.0-lightgrey.svg)
+![Maintenance](https://img.shields.io/badge/Auto%20Maintenance-Enabled-green.svg)
 ________________________________________
 ## Deskripsi  
 Skrip ini dirancang untuk melakukan perawatan sistem Windows secara otomatis dan silent. Menggabungkan beberapa perintah penting untuk memastikan integritas file sistem, kesehatan image Windows, jaringan, dan memori. Setelah skrip selesai, komputer akan melakukan restart otomatis. Skrip ini cocok untuk administrator atau pengguna yang ingin melakukan maintenance rutin tanpa interaksi manual.  
