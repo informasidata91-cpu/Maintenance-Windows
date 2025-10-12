@@ -41,9 +41,14 @@ ________________________________________
   	Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
     Invoke-WebRequest "https://raw.githubusercontent.com/informasidata91-cpu/Maintenance-Windows/main/Maintenance.ps1" -OutFile "Maintenance.ps1"  
     ./Maintenance.ps1
-    
-5.	Tunggu proses selesai — skrip akan menampilkan log di layar dan di C:\MaintenanceLog.txt.  
-6.	Komputer akan otomatis restart untuk menyelesaikan CHKDSK dan Memory Diagnostic.  
+    ```
+    Atau
+    ```powershell
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest 'https://raw.githubusercontent.com/informasidata91-cpu/Maintenance-Windows/main/Maintenance.ps1' -OutFile 'Maintenance.ps1'; ./Maintenance.ps1"
+      
+    ```       
+4.	Tunggu proses selesai — skrip akan menampilkan log di layar dan di C:\MaintenanceLog.txt.  
+5.	Komputer akan otomatis restart untuk menyelesaikan CHKDSK dan Memory Diagnostic.  
 ________________________________________  
 ## Catatan Penting  
 1. Pastikan PowerShell dijalankan dengan hak administrator, jika tidak beberapa langkah seperti DISM dan CHKDSK akan gagal.  
