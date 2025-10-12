@@ -97,10 +97,5 @@ Stop-Transcript
 # Restart otomatis
 Start-Sleep -Seconds 5
 shutdown.exe /r /t 30 /c "Maintenance Windows selesai. Komputer akan restart otomatis."
-
-
-
-
-
-
-
+  
+  
