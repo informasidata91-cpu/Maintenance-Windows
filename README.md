@@ -55,5 +55,31 @@ ________________________________________
 3. Windows Memory Diagnostic dijadwalkan untuk ONSTART, sehingga akan berjalan saat komputer berikutnya booting.  
 4. Skrip ini tidak menghapus file pengguna.  
 ________________________________________
+## 🧩 Penjelasan File: Maintenance.exe
+**Maintenance.exe** adalah versi kompilasi dari skrip otomatisasi pemeliharaan Windows (Maintenance.ps1). File ini dibuat agar pengguna dapat menjalankan seluruh proses perawatan sistem tanpa perlu membuka PowerShell atau Command Prompt secara manual.  
+
+### 🎯 Fungsi Utama  
+- Menjalankan berbagai tugas pemeliharaan sistem Windows secara otomatis, termasuk:  
+  - Pemeriksaan integritas file sistem menggunakan SFC.  
+  - Pemulihan image sistem menggunakan DISM.  
+  - Pembersihan cache DNS dan reset konfigurasi jaringan.  
+  - Penghapusan file sementara dan pembersihan sistem.  
+  - Pemeriksaan memori (RAM) dan restart otomatis setelah proses selesai.  
+- Menyediakan antarmuka eksekusi tunggal (single-click executable) agar mudah digunakan oleh pengguna non-teknis.  
+
+### 🧾 Catatan Tambahan  
+- File **Maintenance.exe** dapat dijalankan langsung dengan klik ganda atau melalui Task Scheduler untuk otomatisasi berkala.  
+- Pastikan menjalankannya dengan hak **Administrator** agar seluruh perintah sistem dapat dieksekusi tanpa hambatan.  
+- Apabila terjadi kesalahan seperti “_The system cannot find the file specified_”, pastikan seluruh file pendukung (.bat, .ps1, atau folder Resources) berada di direktori yang sama.  
+
+### 🧰 Kompilasi & Sumber
+Maintenance.exe dihasilkan dari konversi skrip PowerShell menggunakan alat seperti:  
+- PS2EXE (ps2exe.ps1)  
+- Bat To Exe Converter  
+- atau build pipeline PowerShell bawaan Windows.  
+
+Tujuan kompilasi ini adalah menjaga kemudahan distribusi, keamanan, dan mencegah modifikasi skrip yang tidak diinginkan.
+
+--- 
 ## Disclaimer  
 Skrip ini dibuat untuk perawatan rutin sistem. Gunakan dengan hati-hati pada komputer yang sedang digunakan untuk pekerjaan penting karena akan restart otomatis. Backup data penting selalu disarankan sebelum melakukan perawatan sistem.  
