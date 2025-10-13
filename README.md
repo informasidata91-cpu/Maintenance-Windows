@@ -73,7 +73,7 @@ ________________________________________
 - Apabila terjadi kesalahan seperti “_The system cannot find the file specified_”, pastikan seluruh file pendukung (.bat, .ps1, atau folder Resources) berada di direktori yang sama.  
 
 ### 🧰 Kompilasi & Sumber
-Maintenance.exe dihasilkan dari konversi skrip PowerShell menggunakan alat seperti:  
+**Maintenance.exe** dihasilkan dari konversi skrip PowerShell menggunakan alat seperti:  
 - PS2EXE (ps2exe.ps1)  
 - Bat To Exe Converter  
 - atau build pipeline PowerShell bawaan Windows.  
