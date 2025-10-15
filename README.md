@@ -118,6 +118,26 @@ Jika Anda mengunduh file **Maintenance.exe** dan menemui peringatan, ikuti langk
 1. Jika muncul kotak dialog *Windows protected your PC*, klik **“More info”**.  
 2. Lalu pilih **“Run anyway”** untuk menjalankan program.
 
+#### 🚫 Jika File Dianggap Malware atau Diblokir Antivirus
+Beberapa antivirus atau fitur keamanan Windows (seperti Defender, SmartScreen, atau sistem reputasi file berbasis cloud) dapat salah mendeteksi file yang belum ditandatangani sebagai:
+- “Trojan”  
+- “Suspicious file”  
+- “Potentially unwanted program (PUP)”  
+- “Heuristic detection”  
+- atau menandainya sebagai *malware* tanpa alasan yang jelas.
+
+Hal ini merupakan **deteksi keliru (false positive)** yang umum terjadi pada file yang melakukan **perubahan terhadap sistem** seperti:
+- Membersihkan file sementara (*temporary files*), log, dan cache sistem.  
+- Melakukan optimasi atau reset konfigurasi tertentu.  
+- Menjalankan perintah administratif (*system maintenance*, *cleanup*, atau *service restart*).  
+
+Tindakan tersebut **bukan aktivitas berbahaya**, namun karena melibatkan perubahan sistem, beberapa antivirus dapat menganggapnya sebagai potensi ancaman. Jika Anda mendapatkan peringatan seperti itu:
+1. Pilih opsi **“Allow”**, **“Allow on device”**, atau **“Restore”** dari karantina antivirus.  
+2. Tambahkan file **Maintenance.exe** ke daftar **exceptions / exclusions** pada antivirus.  
+3. Pastikan file tersebut diunduh **hanya dari repositori resmi ini** untuk menjamin keasliannya.  
+
+Tindakan *Allow* atau *Restore* dalam konteks ini **tidak berbahaya**, karena file ini **tidak mengandung virus, trojan, atau malware**, melainkan menjalankan fungsi *system cleaning* dan *maintenance* sebagaimana yang dijelaskan dalam proyek ini.    
+
 #### ✅ Apakah Aman Dijalankan?
 Ya, **file Maintenance.exe aman dijalankan**, selama Anda mengunduhnya langsung dari repositori resmi ini (**Data Informasi™ – Maintenance Windows**). File ini tidak mengandung kode berbahaya, malware, atau aktivitas mencurigakan. Peringatan SmartScreen dapat diabaikan **karena penyebabnya hanya absennya sertifikat digital**, bukan karena ada ancaman nyata.
 
