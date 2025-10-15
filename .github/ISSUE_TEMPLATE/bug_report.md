@@ -3,7 +3,7 @@ name: Bug report
 about: Buat laporan untuk membantu kami meningkatkan  |  Create a report to help us
   improve
 title: ''
-labels: bug
+labels: bug, enhancement
 assignees: informasidata91-cpu
 
 ---
