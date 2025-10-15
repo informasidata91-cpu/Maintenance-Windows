@@ -80,6 +80,58 @@ ________________________________________
 
 Tujuan kompilasi ini adalah menjaga kemudahan distribusi, keamanan, dan mencegah modifikasi skrip yang tidak diinginkan.
 
+### 🛡️ Verifikasi Keamanan File
+>
+> Saat pengguna mengunduh **Maintenance.exe**, sistem keamanan pada browser atau Windows mungkin akan menampilkan peringatan seperti berikut:
+>
+> 1. “Windows protected your PC”  
+> 2. “This app can’t be verified”  
+> 3. “This type of file can harm your computer”  
+> 4. “This app can’t run on your PC”  
+> 5. “Unknown publisher – The publisher of this app couldn’t be verified”
+>
+> Pesan-pesan tersebut **tidak berarti file berbahaya**, melainkan karena **file belum ditandatangani (unsigned)** menggunakan **sertifikat digital resmi dari Otoritas Sertifikat (Certificate Authority/CA)**.
+
+#### 🧾 Mengapa Muncul Peringatan?
+Windows dan browser modern seperti Microsoft Edge, Google Chrome, atau Mozilla Firefox secara otomatis memeriksa tanda tangan digital pada file eksekusi (*.exe*) untuk memastikan:
+- Identitas penerbit dapat diverifikasi.  
+- File tidak diubah setelah ditandatangani.  
+
+Apabila file tidak memiliki tanda tangan digital yang valid, sistem tidak dapat mengonfirmasi penerbitnya, sehingga muncul peringatan sebagai tindakan pencegahan keamanan.
+
+#### 🧩 Cara Tetap Mengunduh File
+Jika Anda mengunduh file **Maintenance.exe** dan menemui peringatan, ikuti langkah-langkah berikut sesuai browser yang digunakan:
+
+**🔹 Microsoft Edge:**
+1. Saat muncul pesan *“Maintenance.exe was blocked because it could harm your device”*, klik **"..." (titik tiga)** di sebelah kanan pesan.  
+2. Pilih **"Keep"** → kemudian pilih **"Show more"** → **"Keep anyway"**.  
+3. Setelah file tersimpan, klik kanan pada file → **Properties** → centang **"Unblock"** (jika ada), lalu jalankan.
+
+**🔹 Google Chrome:**
+1. Jika muncul pesan *“Maintenance.exe may be dangerous”*, klik **panah kecil (˅)** di sebelah kanan pesan.  
+2. Pilih **"Keep"** → kemudian **"Keep anyway"** untuk tetap menyimpan file.  
+
+**🔹 Firefox:**
+1. Jika muncul pesan *“This file may harm your computer”*, klik **"Allow download"** untuk melanjutkan.  
+
+**🔹 Saat menjalankan di Windows:**
+1. Jika muncul kotak dialog *Windows protected your PC*, klik **“More info”**.  
+2. Lalu pilih **“Run anyway”** untuk menjalankan program.
+
+#### ✅ Apakah Aman Dijalankan?
+Ya, **file Maintenance.exe aman dijalankan**, selama Anda mengunduhnya langsung dari repositori resmi ini (**Data Informasi™ – Maintenance Windows**). File ini tidak mengandung kode berbahaya, malware, atau aktivitas mencurigakan. Peringatan SmartScreen dapat diabaikan **karena penyebabnya hanya absennya sertifikat digital**, bukan karena ada ancaman nyata.
+
+#### 🪪 Mengapa Tidak Ditandatangani Sertifikat Resmi?
+Untuk memperoleh sertifikat digital resmi dari CA terpercaya (seperti **DigiCert**, **Sectigo**, atau **GlobalSign**), pengembang harus:
+- Melalui proses verifikasi identitas organisasi atau individu yang ketat.  
+- Menyediakan dokumen hukum dan bukti kepemilikan domain.  
+- Membayar biaya tahunan yang tidak sedikit (umumnya mulai dari ratusan hingga ribuan dolar per tahun).
+
+Karena proses dan biayanya tidak sederhana, banyak proyek **independen, non-komersial, atau open-source** memilih untuk tidak menggunakan tanda tangan digital resmi, selama distribusi file dilakukan melalui **sumber resmi yang tepercaya**.
+
+> 💡 **Kesimpulan:**  
+> File **Maintenance.exe** aman digunakan apabila diunduh langsung dari repositori resmi ini. Peringatan SmartScreen hanyalah bagian dari mekanisme perlindungan standar Windows terhadap file tanpa sertifikat digital, **bukan indikasi bahwa file berbahaya**.
+
 --- 
 ## Disclaimer  
 Skrip ini dibuat untuk perawatan rutin sistem. Gunakan dengan hati-hati pada komputer yang sedang digunakan untuk pekerjaan penting karena akan restart otomatis. Backup data penting selalu disarankan sebelum melakukan perawatan sistem.  
