@@ -25,7 +25,13 @@ $script:StartTime = Get-Date
 
 # TLS
 $OriginalProtocol = [Net.ServicePointManager]::SecurityProtocol
-try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor ([enum]::IsDefined([Net.SecurityProtocolType],'Tls13') ? [Net.SecurityProtocolType]::Tls13 : 0) } catch {}
+try {
+  if ($PSVersionTable.PSVersion.Major -ge 7) {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::SystemDefault
+  } else {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+  }
+} catch {}
 
 function Ensure-Admin {
   $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -294,3 +300,4 @@ finally {
   try { [Net.ServicePointManager]::SecurityProtocol = $OriginalProtocol } catch {}
   Stop-Log
 }
+
