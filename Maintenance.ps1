@@ -295,7 +295,7 @@ try {
       Schedule-AutoRestart
     }
   } else {
-    Write-Status 'NoRestart aktif — tidak restart otomatis.' 'DarkYellow'
+    Write-Status 'NoRestart aktif - tidak restart otomatis.' 'DarkYellow'
   }
 
   exit 0
@@ -308,3 +308,4 @@ finally {
   try { [Net.ServicePointManager]::SecurityProtocol = $OriginalProtocol } catch {}
   Stop-Log
 }
+
