@@ -235,7 +235,7 @@ try {
   Write-Host "==============================================="
   Write-Host "Sistem akan restart otomatis setelah selesai." -ForegroundColor Yellow
   Write-Host "Jangan mematikan komputer sebelum proses maintenance selesai." -ForegroundColor Yellow
-  Write-Host 'Proses bisa memakan waktu; simpan pekerjaan Anda.' -ForegroundColor Yellow
+  Write-Host 'Proses bisa memakan waktu - simpan pekerjaan Anda.' -ForegroundColor Yellow
   Write-Host "-----------------------------------------------"
   Write-Host "`n*** MEMULAI MAINTENANCE WINDOWS ***" -ForegroundColor Cyan
   
@@ -314,4 +314,5 @@ finally {
   try { [Net.ServicePointManager]::SecurityProtocol = $OriginalProtocol } catch {}
   Stop-Log
 }
+
 
