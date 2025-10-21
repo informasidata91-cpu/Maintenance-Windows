@@ -1,6 +1,6 @@
 <#
 Versi: 2.5.1 Deep Check
-Fokus: kompat PS 5.1/7+, logging aman, urutan adaptif SFC→DISM→CHKDSK online, Reset WU resmi, optimasi HDD/SSD.
+Fokus: kompat PS 5.1/7+, logging aman, urutan adaptif SFC->DISM->CHKDSK online, Reset WU resmi, optimasi HDD/SSD.
 #>
 
 [CmdletBinding()]
@@ -257,16 +257,16 @@ try {
     $i++
     Section $i $TotalSteps $t.Name
     if ($t.Skip) {
-      Write-Status ($t.Name + ' → [SKIPPED]') 'DarkYellow'
-      [void]$executed.Add("[$i/$TotalSteps] $($t.Name) → SKIPPED")
+      Write-Status ($t.Name + ' -> [SKIPPED]') 'DarkYellow'
+      [void]$executed.Add("[$i/$TotalSteps] $($t.Name) -> SKIPPED")
     } else {
       try {
         & $t.Action
-        Write-Status ($t.Name + ' → [OK]') 'Green'
-        [void]$executed.Add("[$i/$TotalSteps] $($t.Name) → OK")
+        Write-Status ($t.Name + ' -> [OK]') 'Green'
+        [void]$executed.Add("[$i/$TotalSteps] $($t.Name) -> OK")
       } catch {
-        Write-Status ($t.Name + ' → [FAILED] ' + $_.Exception.Message) 'Red'
-        [void]$executed.Add("[$i/$TotalSteps] $($t.Name) → FAILED: $($_.Exception.Message)")
+        Write-Status ($t.Name + ' -> [FAILED] ' + $_.Exception.Message) 'Red'
+        [void]$executed.Add("[$i/$TotalSteps] $($t.Name) -> FAILED: $($_.Exception.Message)")
       }
     }
   }
@@ -308,4 +308,5 @@ finally {
   try { [Net.ServicePointManager]::SecurityProtocol = $OriginalProtocol } catch {}
   Stop-Log
 }
+
 
