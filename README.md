@@ -10,28 +10,42 @@ ________________________________________
 Skrip ini dirancang untuk melakukan perawatan sistem Windows secara otomatis dan silent. Menggabungkan beberapa perintah penting untuk memastikan integritas file sistem, kesehatan image Windows, jaringan, dan memori. Setelah skrip selesai, komputer akan melakukan restart otomatis. Skrip ini cocok untuk administrator atau pengguna yang ingin melakukan maintenance rutin tanpa interaksi manual.  
 ________________________________________
 ## Fitur Utama  
-1.	System File Checker (SFC)  
-    Memeriksa dan memperbaiki file sistem Windows yang rusak.  
-2.	DISM (Deployment Image Servicing and Management) – 3-Step  
-    o	/CheckHealth – memeriksa apakah image Windows rusak.  
-    o	/ScanHealth – scan lebih mendalam untuk kerusakan image.  
-    o	/RestoreHealth – memperbaiki kerusakan image secara otomatis.  
-3.	Flush DNS  
-    Membersihkan cache DNS untuk memperbaiki masalah konektivitas atau resolusi nama domain.  
-4.	Reset Winsock  
-    Mereset konfigurasi jaringan Windows untuk menyelesaikan masalah koneksi.
-5.  Disk Cleanup – Drive C  
-    Fungsi ini digunakan untuk membersihkan file-file sementara dan sisa sistem pada Drive C: secara otomatis. Tujuannya adalah untuk mengosongkan ruang penyimpanan, meningkatkan performa sistem, serta menjaga kestabilan Windows.
-6.	CHKDSK  
-    Memeriksa integritas drive C: dan secara otomatis menjadwalkan perbaikan bila ditemukan masalah.  
-7.	Memory Diagnostic  
-    Menjadwalkan Windows Memory Diagnostic untuk dijalankan saat restart.  
-8.	Logging Otomatis  
-    Semua output perintah disimpan di:  
-    C:\MaintenanceLog.txt  
-9.	Restart Otomatis  
-    Setelah semua langkah selesai, komputer akan restart dalam 30 detik dengan pesan:  
-    "Maintenance Windows selesai. Komputer akan restart otomatis."  
+
+1. **DISM (Deployment Image Servicing and Management) – 3-Step**  
+   - /CheckHealth: Memeriksa apakah image Windows rusak.  
+   - /ScanHealth: Melakukan scan lebih mendalam untuk mendeteksi kerusakan image.  
+   - /RestoreHealth: Memperbaiki kerusakan image secara otomatis.  
+   Langkah ini memastikan sistem Windows tetap sehat dan siap menerima update.  
+
+2. **System File Checker (SFC)**  
+   Memindai dan memperbaiki file sistem Windows yang rusak atau hilang. SFC memastikan semua file inti Windows berada dalam kondisi baik sehingga mencegah error, crash, dan gangguan layanan.  
+
+3. **Reset Windows Update Components**  
+   Menghentikan layanan Windows Update, membersihkan cache, dan menghidupkan kembali layanan tersebut. Proses ini penting untuk mengatasi masalah pembaruan Windows yang sering gagal akibat cache atau metadata yang bermasalah.  
+
+4. **Network Fixes (Flush DNS & Reset Winsock)**  
+   Membersihkan cache DNS untuk memperbaiki masalah konektivitas atau resolusi nama domain, serta mereset konfigurasi jaringan Windows (Winsock) untuk menyelesaikan masalah koneksi.  
+
+5. **Disk Cleanup**  
+   Membersihkan file-file sementara, komponen usang, dan mengosongkan Recycle Bin. Termasuk pembersihan ekstra seperti cache Windows Update, Delivery Optimization, log CBS/DISM, Prefetch, dan Windows.old. Tujuannya adalah mengosongkan ruang penyimpanan, meningkatkan performa sistem, serta menjaga kestabilan Windows.  
+
+6. **Disk Cleanup Drive C: (opsional)**  
+   Menjalankan pembersihan khusus pada drive C: untuk menghapus file sisa dan temporary yang tidak terhapus pada langkah sebelumnya.  
+
+7. **Optimize Volumes (Defrag/TRIM)**  
+   Mengoptimalkan drive dengan menjalankan defragmentasi pada HDD dan TRIM pada SSD. Langkah ini bertujuan menjaga performa penyimpanan dan memperpanjang umur perangkat.  
+
+8. **CHKDSK**  
+   Memeriksa integritas drive C: dan secara otomatis menjadwalkan perbaikan bila ditemukan masalah. Fitur ini membantu mendeteksi dan memperbaiki kerusakan pada sistem berkas dan sektor disk.  
+
+9. **Windows Memory Diagnostic**  
+   Menjadwalkan Windows Memory Diagnostic untuk dijalankan saat restart berikutnya. Pemeriksaan ini bertujuan mendeteksi masalah pada RAM yang dapat menyebabkan crash atau error acak.  
+
+10. **Logging Otomatis**  
+    Seluruh output dan status eksekusi dicatat ke file log utama di `C:\MaintenanceLog.txt`. Fitur ini memudahkan audit, troubleshooting, dan dokumentasi hasil maintenance.  
+
+11. **Restart Otomatis**  
+    Setelah semua langkah selesai, komputer akan restart dalam 30 detik dengan pesan: "_Maintenance Windows selesai. Komputer akan restart otomatis._" Langkah ini memastikan semua perubahan dan perbaikan diterapkan dengan benar.    
 ________________________________________
 ## Cara Penggunaan  
 1.	Simpan skrip sebagai Maintenance.ps1.  
