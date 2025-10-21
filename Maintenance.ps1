@@ -31,6 +31,8 @@ try {
   } else {
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
   }
+  }
+  
 } catch {}
 
 function Ensure-Admin {
@@ -300,4 +302,5 @@ finally {
   try { [Net.ServicePointManager]::SecurityProtocol = $OriginalProtocol } catch {}
   Stop-Log
 }
+
 
