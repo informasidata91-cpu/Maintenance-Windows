@@ -290,13 +290,14 @@ try {
   exit 0
 }
 catch {
-  Write-Host "Kesalahan fatal: $($_.Exception.Message)" -ForegroundColor Red
+  Write-Host ('Kesalahan fatal: ' + $($_.Exception.Message)) -ForegroundColor Red
   exit 1
 }
 finally {
   try { [Net.ServicePointManager]::SecurityProtocol = $OriginalProtocol } catch {}
   Stop-Log
 }
+
 
 
 
