@@ -1,5 +1,5 @@
 <#
-Version: 2.6.0 Deep Check (ASCII-safe)
+Version: 2.6.0 
 Focus: Compatible with PowerShell 5.1 and 7+, robust logging, adaptive SFC -> DISM -> CHKDSK online, Windows Update reset, HDD/SSD optimization.
 #>
 
@@ -230,8 +230,15 @@ try {
   New-Log
 
   if (-not $Silent) {
-    Write-Host "`n*** MEMULAI MAINTENANCE WINDOWS (Deep Check) ***" -ForegroundColor Cyan
-    Write-Host 'Proses bisa memakan waktu; simpan pekerjaan Anda.' -ForegroundColor Yellow
+  Write-Host "==============================================="
+  Write-Host "  PEMBERITAHUAN MAINTENANCE WINDOWS"
+  Write-Host "==============================================="
+  Write-Host "Sistem akan restart otomatis setelah selesai." -ForegroundColor Yellow
+  Write-Host "Jangan mematikan komputer sebelum proses maintenance selesai." -ForegroundColor Yellow
+  Write-Host 'Proses bisa memakan waktu; simpan pekerjaan Anda.' -ForegroundColor Yellow
+  Write-Host "-----------------------------------------------"
+  Write-Host "`n*** MEMULAI MAINTENANCE WINDOWS ***" -ForegroundColor Cyan
+  
     Start-Sleep 2
   }
 
@@ -307,3 +314,4 @@ finally {
   try { [Net.ServicePointManager]::SecurityProtocol = $OriginalProtocol } catch {}
   Stop-Log
 }
+
