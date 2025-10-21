@@ -1,25 +1,6 @@
 <#
-.SYNOPSIS
-  Windows Maintenance All-in-One dengan logging utama di C:\MaintenanceLog.txt.
-
-.DESCRIPTION
-  Melakukan pemeliharaan menyeluruh Windows: DISM, SFC, Reset WU, Cleanup, Defrag, CHKDSK, Network Fix, dan Memory Diagnostic.
-  Log disimpan di: C:\MaintenanceLog.txt
-
-.PARAMETER Silent
-  Menjalankan mode non-interaktif (tanpa prompt).
-
-.PARAMETER SkipDISM, SkipSFC, SkipWUReset, SkipCleanup, SkipDefrag, SkipChkdsk, SkipNetworkFix, SkipMemoryDiag, SkipExtraCleanup
-  Melewati task terkait (ditandai [SKIPPED] tanpa menaikkan counter).
-
-.PARAMETER NoRestart
-  Mencegah restart otomatis di akhir proses.
-
-.NOTES
-  - Jalankan sebagai Administrator.
-  - Disarankan koneksi internet aktif untuk DISM RestoreHealth.
-  - Log utama: C:\MaintenanceLog.txt
-  - Versi: 2.3.6 (dengan pesan peringatan awal)
+Versi: 2.5.0 Deep Check
+Fokus: logging andal, urutan SFC→DISM→CHKDSK online, Reset WU resmi, optimasi HDD/SSD.
 #>
 
 [CmdletBinding()]
@@ -37,99 +18,126 @@ param(
   [switch]$NoRestart
 )
 
-# ====== Konfigurasi dasar ======
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $global:LogFile = "C:\MaintenanceLog.txt"
 $script:StartTime = Get-Date
 
-# ====== TLS Modern Support ======
+# TLS
 $OriginalProtocol = [Net.ServicePointManager]::SecurityProtocol
-try {
-  [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor `
-    ([enum]::IsDefined([Net.SecurityProtocolType], 'Tls13') ? [Net.SecurityProtocolType]::Tls13 : 0)
-} catch {}
+try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor ([enum]::IsDefined([Net.SecurityProtocolType],'Tls13') ? [Net.SecurityProtocolType]::Tls13 : 0) } catch {}
 
-# ====== Helper ======
 function Ensure-Admin {
-  $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+  $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
   if (-not $isAdmin) {
-    Write-Host "Elevating to Administrator..."
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = "powershell.exe"
-    $psi.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" " + ($MyInvocation.Line.Split(' ') | Where-Object {$_ -notmatch 'powershell.exe'})
+    $args = @("-NoProfile","-ExecutionPolicy","Bypass","-File","`"$PSCommandPath`"") + $PSBoundParameters.GetEnumerator() | ForEach-Object {
+      if ($_.Value -eq $true) { "-$($_.Key)" } else { "-$($_.Key) `"$($_.Value)`"" }
+    }
+    $psi.Arguments = $args -join ' '
     $psi.Verb = "runas"
-    try { [Diagnostics.Process]::Start($psi) | Out-Null } catch { throw "User cancelled UAC or elevation failed." }
+    [Diagnostics.Process]::Start($psi) | Out-Null
     exit
   }
 }
 
 function Write-Status($msg, $color="Gray") {
-  $timestamp = Get-Date -Format "HH:mm:ss"
-  Write-Host "[$timestamp] $msg" -ForegroundColor $color
+  $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+  Write-Host "[$ts] $msg" -ForegroundColor $color
 }
 
 function New-Log {
   try {
     if (-not (Test-Path -LiteralPath $LogFile)) { New-Item -ItemType File -Path $LogFile -Force | Out-Null }
     Start-Transcript -Path $LogFile -Append | Out-Null
-    Write-Status "Logging started → $LogFile" "DarkCyan"
-  } catch { Write-Warning "Gagal memulai transcript ke $LogFile." }
+    Write-Status "Transcript → $LogFile" "DarkCyan"
+  } catch {
+    Write-Host "Gagal memulai transcript: $($_.Exception.Message)" -ForegroundColor Yellow
+  }
 }
+
 function Stop-Log {
   try { Stop-Transcript | Out-Null } catch {}
-  $duration = (Get-Date) - $script:StartTime
-  Write-Host "Log: $LogFile (Durasi: $([math]::Round($duration.TotalMinutes,2)) menit)" -ForegroundColor Cyan
+  $d = (Get-Date) - $script:StartTime
+  Write-Host "Log: $LogFile (Durasi: $([Math]::Round($d.TotalMinutes,2)) menit)" -ForegroundColor Cyan
 }
 
+# Proses eksternal diarahkan ke host agar tercatat di transcript
 function Invoke-External {
-  param([Parameter(Mandatory)][string]$FilePath,[string]$Arguments = "",[int[]]$SuccessExitCodes = @(0))
+  [CmdletBinding()]
+  param(
+    [Parameter(Mandatory)][string]$FilePath,
+    [string]$Arguments = "",
+    [int[]]$SuccessExitCodes = @(0),
+    [int]$TimeoutSec = 0
+  )
   Write-Host ">> $FilePath $Arguments" -ForegroundColor DarkGray
-  $p = Start-Process -FilePath $FilePath -ArgumentList $Arguments -Wait -PassThru -WindowStyle Hidden
-  if ($SuccessExitCodes -notcontains $p.ExitCode) { throw "Command failed ($($p.ExitCode)): $FilePath $Arguments" }
+  $psi = New-Object System.Diagnostics.ProcessStartInfo
+  $psi.FileName = "cmd.exe"
+  $psi.Arguments = "/c `"$FilePath`" $Arguments"
+  $psi.UseShellExecute = $false
+  $psi.RedirectStandardOutput = $false
+  $psi.RedirectStandardError = $false
+  $psi.CreateNoWindow = $false
+  $p = [System.Diagnostics.Process]::Start($psi)
+  if ($TimeoutSec -gt 0) {
+    if (-not $p.WaitForExit($TimeoutSec * 1000)) {
+      try { $p.Kill() } catch {}
+      throw "Timeout menjalankan: $FilePath $Arguments"
+    }
+  } else { $p.WaitForExit() }
+  if ($SuccessExitCodes -notcontains $p.ExitCode) {
+    throw "ExitCode $($p.ExitCode): $FilePath $Arguments"
+  }
 }
 
-function Run-AdminCommand {
-  param([Parameter(Mandatory)][string]$Command)
-  Start-Process -FilePath "cmd.exe" -ArgumentList "/c $Command" -Verb RunAs -WindowStyle Hidden -Wait
+function Section($i,$t,$name){ Write-Host ("`n[{0}/{1}] {2}" -f $i,$t,$name) -ForegroundColor Yellow; Write-Host ("=" * (12 + $name.Length)) -ForegroundColor DarkGray }
+
+# ——— Integritas OS ———
+function Run-SFC {
+  Write-Status "SFC /Scannow..."
+  Invoke-External sfc.exe "/scannow"
+  # Kembalikan indikasi untuk keputusan DISM
+  return $LASTEXITCODE
 }
 
-function Section($index, $total, $title) {
-  Write-Host ("`n[{0}/{1}] {2}" -f $index, $total, $title) -ForegroundColor Yellow
-  Write-Host ("=" * (12 + $title.Length)) -ForegroundColor DarkGray
-}
-
-# ====== Tugas Pemeliharaan ======
-function Repair-ComponentStore-3Step {
-  Write-Status "Menjalankan DISM 3-step..." "Gray"
+function Run-DISM-3 {
+  Write-Status "DISM CheckHealth..."
   Invoke-External dism.exe "/Online /Cleanup-Image /CheckHealth"
+  Write-Status "DISM ScanHealth..."
   Invoke-External dism.exe "/Online /Cleanup-Image /ScanHealth"
+  Write-Status "DISM RestoreHealth..."
   Invoke-External dism.exe "/Online /Cleanup-Image /RestoreHealth"
 }
-function Repair-SystemFiles {
-  Write-Status "Menjalankan SFC /Scannow..." "Gray"
-  Invoke-External sfc.exe "/scannow"
-}
+
+# ——— Windows Update ———
 function Reset-WindowsUpdate {
-  Write-Status "Reset komponen Windows Update..." "Gray"
-  $services = "wuauserv","bits","cryptsvc","msiserver"
-  foreach ($svc in $services) { Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue }
+  Write-Status "Reset Windows Update components..."
+  $svcs = "bits","wuauserv","cryptsvc","msiserver"
+  foreach ($s in $svcs) { Stop-Service $s -Force -ErrorAction SilentlyContinue }
   Start-Sleep 2
-  Rename-Item "$env:windir\SoftwareDistribution" "$env:windir\SoftwareDistribution.bak-$(Get-Date -f yyyyMMddHHmmss)" -ErrorAction SilentlyContinue
-  Rename-Item "$env:windir\System32\catroot2" "$env:windir\System32\catroot2.bak-$(Get-Date -f yyyyMMddHHmmss)" -ErrorAction SilentlyContinue
-  foreach ($svc in $services) { Start-Service -Name $svc -ErrorAction SilentlyContinue }
+  $sd = Join-Path $env:windir "SoftwareDistribution"
+  $cr = Join-Path $env:windir "System32\catroot2"
+  $ts = Get-Date -f yyyyMMddHHmmss
+  if (Test-Path $sd) { Rename-Item $sd "$sd.bak-$ts" -ErrorAction SilentlyContinue }
+  if (Test-Path $cr) { Rename-Item $cr "$cr.bak-$ts" -ErrorAction SilentlyContinue }
+  foreach ($s in $svcs) { Start-Service $s -ErrorAction SilentlyContinue }
 }
+
+# ——— Cleanup ———
 function Run-Cleanup {
-  Write-Status "Membersihkan folder sementara & komponen sistem..." "Gray"
-  $paths = @($env:TEMP, $env:TMP, "$env:WINDIR\Temp") | Where-Object { Test-Path $_ }
+  Write-Status "Cleanup temp dan komponen..."
+  $paths = @($env:TEMP, $env:TMP, "$env:WINDIR\Temp") | Where-Object { $_ -and (Test-Path $_) }
   foreach ($p in $paths) {
     try { Get-ChildItem -Path $p -Recurse -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue } catch {}
   }
   Invoke-External dism.exe "/Online /Cleanup-Image /StartComponentCleanup"
-  Clear-RecycleBin -Force -ErrorAction SilentlyContinue
+  try { Clear-RecycleBin -Force -ErrorAction SilentlyContinue } catch {}
 }
+
 function Extra-Cleanup {
-  Write-Status "Melakukan pembersihan lanjutan..." "Gray"
+  Write-Status "Extra cleanup..."
   $targets = @(
     "$env:WINDIR\SoftwareDistribution\Download",
     "$env:WINDIR\SoftwareDistribution\DeliveryOptimization",
@@ -137,85 +145,116 @@ function Extra-Cleanup {
     "$env:WINDIR\Logs\DISM",
     "$env:WINDIR\Prefetch"
   )
-  foreach ($t in $targets) {
-    if (Test-Path $t) { Remove-Item $t -Recurse -Force -ErrorAction SilentlyContinue }
-  }
+  foreach ($t in $targets) { if (Test-Path $t) { Remove-Item $t -Recurse -Force -ErrorAction SilentlyContinue } }
   if (Test-Path "C:\Windows.old") {
-    Run-AdminCommand "takeown /F C:\Windows.old /R /A /D Y"
-    Run-AdminCommand "icacls C:\Windows.old /grant administrators:F /T"
-    Run-AdminCommand "rmdir /s /q C:\Windows.old"
+    Write-Status "Hapus Windows.old (rollback tidak lagi tersedia)..."
+    try {
+      Remove-Item "C:\Windows.old" -Recurse -Force -ErrorAction Stop
+    } catch {
+      Write-Status "Fallback takeown/icacls Windows.old..."
+      Invoke-External takeown.exe "/F C:\Windows.old /R /A /D Y"
+      Invoke-External icacls.exe "C:\Windows.old /grant administrators:F /T"
+      Invoke-External cmd.exe "/c rmdir /s /q C:\Windows.old"
+    }
   }
-}
-function Optimize-Drives {
-  Write-Status "Optimasi drive (Defrag/TRIM)..." "Gray"
-  $vols = Get-Volume | Where-Object { $_.DriveType -eq 'Fixed' -and $_.DriveLetter }
-  foreach ($v in $vols) { Optimize-Volume -DriveLetter $v.DriveLetter -ErrorAction SilentlyContinue }
-}
-function Schedule-CHKDSK-RepairIfNeeded {
-  Write-Status "Menjadwalkan CHKDSK..." "Gray"
-  $drv = $env:SystemDrive.TrimEnd(':')
-  Start-Process cmd.exe "/c chkdsk $drv`: /scan" -Wait -WindowStyle Hidden
-}
-function Flush-DNS { Write-Status "Flush DNS Cache..." "Gray"; Clear-DnsClientCache -ErrorAction SilentlyContinue }
-function Reset-Winsock { Write-Status "Reset Winsock..." "Gray"; Invoke-External netsh.exe "winsock reset" }
-function Schedule-MemoryDiagnostic {
-  Write-Status "Menjadwalkan Windows Memory Diagnostic..." "Gray"
-  Start-Process "$env:WINDIR\System32\mdsched.exe" "/s" -Verb RunAs -WindowStyle Hidden
-}
-function Schedule-AutoRestart {
-  Write-Status "Menjadwalkan restart otomatis dalam 30 detik..." "Gray"
-  Start-Process shutdown.exe "/r /t 30 /c `"Maintenance Windows selesai.`"" -WindowStyle Hidden
 }
 
-# ====== Eksekusi ======
+# ——— Network fix ———
+function Flush-DNS { Write-Status "Flush DNS cache..."; try { Clear-DnsClientCache -ErrorAction SilentlyContinue } catch {} }
+function Reset-Winsock { Write-Status "Winsock reset..."; Invoke-External netsh.exe "winsock reset" }
+
+# ——— Storage ———
+function Optimize-Drives {
+  Write-Status "Analyze + Defrag/ReTrim..."
+  $vols = Get-Volume | Where-Object { $_.DriveType -eq 'Fixed' -and $_.DriveLetter }
+  foreach ($v in $vols) {
+    try {
+      Optimize-Volume -DriveLetter $v.DriveLetter -Analyze -Verbose -ErrorAction SilentlyContinue
+      $dl = $v.DriveLetter
+      $isSSD = $false
+      try {
+        $pd = Get-Partition -DriveLetter $dl | Get-Disk | Get-PhysicalDisk -ErrorAction Stop
+        $isSSD = ($pd.MediaType -eq 'SSD')
+      } catch {}
+      if ($isSSD) {
+        Optimize-Volume -DriveLetter $dl -ReTrim -Verbose -ErrorAction SilentlyContinue
+      } else {
+        Optimize-Volume -DriveLetter $dl -Defrag -Verbose -ErrorAction SilentlyContinue
+      }
+    } catch {
+      Write-Status "Optimize gagal $($v.DriveLetter): $($_.Exception.Message)" "DarkYellow"
+    }
+  }
+}
+
+# ——— CHKDSK ———
+function Chkdsk-Online-And-Schedule {
+  Write-Status "CHKDSK online /scan..."
+  $drv = $env:SystemDrive.TrimEnd(':')
+  $proc = Start-Process -FilePath "cmd.exe" -ArgumentList "/c chkdsk $drv`: /scan" -Wait -PassThru
+  $needRepair = $LASTEXITCODE -ne 0
+  if ($needRepair) {
+    Write-Status "Menjadwalkan CHKDSK /F /R pada reboot..."
+    Start-Process -FilePath "cmd.exe" -ArgumentList "/c echo Y | chkdsk $drv`: /F /R" -Verb RunAs -Wait
+  } else {
+    Write-Status "Tidak perlu penjadwalan CHKDSK." "Green"
+  }
+}
+
+# ——— Memory diag ———
+function Schedule-MemoryDiagnostic {
+  Write-Status "Jadwalkan Windows Memory Diagnostic..."
+  Start-Process "$env:WINDIR\System32\mdsched.exe" "/s" -Verb RunAs
+}
+
+function Schedule-AutoRestart {
+  Write-Status "Jadwalkan restart otomatis dalam 30 detik..."
+  Start-Process shutdown.exe "/r /t 30 /c `"Maintenance Windows selesai.`""
+}
+
+# ===== Eksekusi =====
 try {
   Ensure-Admin
   New-Log
 
   if (-not $Silent) {
-    Write-Host "`n*** MEMULAI MAINTENANCE WINDOWS ***" -ForegroundColor Cyan
-    Write-Host "Proses akan memakan waktu beberapa menit." -ForegroundColor Yellow
-    Start-Sleep 3
+    Write-Host "`n*** MEMULAI MAINTENANCE WINDOWS (Deep Check) ***" -ForegroundColor Cyan
+    Write-Host "Proses bisa memakan waktu; simpan pekerjaan Anda." -ForegroundColor Yellow
+    Start-Sleep 2
   }
 
-# 🔔 Tambahan pesan peringatan di awal
-  Write-Host ""
-  Write-Host "Memulai proses Maintenance Windows. Mohon simpan pekerjaan Anda." -ForegroundColor Yellow
-  Write-Host "Sistem akan restart otomatis setelah selesai." -ForegroundColor Yellow
-  Write-Host "Jangan mematikan komputer sebelum proses maintenance selesai." -ForegroundColor Yellow
-  Write-Host "--------------------------------------------------------------"
-  Write-Host ""
-  $TotalSteps = 10
+  # Urutan mendalam dan adaptif: SFC -> DISM (kondisional) -> WU -> Network -> Cleanup -> Extra -> Optimize -> CHKDSK -> MemDiag
+  $tasks = @()
+
+  $tasks += @{ Name="SFC"; Action={ if (-not $SkipSFC) { $script:SfcExit = Run-SFC } }; Skip=$SkipSFC }
+  $tasks += @{ Name="DISM 3-step (kondisional)"; Action={ if (-not $SkipDISM) {
+      if ($script:SfcExit -ne 0) { Run-DISM-3 } else { Write-Status "SFC OK; DISM dilewati (tidak diperlukan)"; }
+  } }; Skip=$SkipDISM }
+  $tasks += @{ Name="Reset Windows Update"; Action={ if (-not $SkipWUReset) { Reset-WindowsUpdate } }; Skip=$SkipWUReset }
+  $tasks += @{ Name="Network Fix"; Action={ if (-not $SkipNetworkFix) { Flush-DNS; Reset-Winsock } }; Skip=$SkipNetworkFix }
+  $tasks += @{ Name="Disk Cleanup"; Action={ if (-not $SkipCleanup) { Run-Cleanup } }; Skip=$SkipCleanup }
+  $tasks += @{ Name="Extra Cleanup"; Action={ if (-not $SkipExtraCleanup) { Extra-Cleanup } }; Skip=$SkipExtraCleanup }
+  $tasks += @{ Name="Optimize Drives"; Action={ if (-not $SkipDefrag) { Optimize-Drives } }; Skip=$SkipDefrag }
+  $tasks += @{ Name="CHKDSK"; Action={ if (-not $SkipChkdsk) { Chkdsk-Online-And-Schedule } }; Skip=$SkipChkdsk }
+  $tasks += @{ Name="Memory Diagnostic"; Action={ if (-not $SkipMemoryDiag) { Schedule-MemoryDiagnostic } }; Skip=$SkipMemoryDiag }
+
+  $TotalSteps = $tasks.Count
   $executed = [System.Collections.ArrayList]::new()
-
-  # ===== Daftar tugas =====
-  $tasks = @(
-    @{ Name="DISM 3-step"; Action={ if (-not $SkipDISM) { Repair-ComponentStore-3Step } }; Skip=$SkipDISM },
-    @{ Name="SFC ScanNow"; Action={ if (-not $SkipSFC) { Repair-SystemFiles } }; Skip=$SkipSFC },
-    @{ Name="Reset Windows Update"; Action={ if (-not $SkipWUReset) { Reset-WindowsUpdate } }; Skip=$SkipWUReset },
-    @{ Name="Network Fix (FlushDNS & Winsock)"; Action={ if (-not $SkipNetworkFix) { Flush-DNS; Reset-Winsock } }; Skip=$SkipNetworkFix },
-    @{ Name="Disk Cleanup"; Action={ if (-not $SkipCleanup) { Run-Cleanup } }; Skip=$SkipCleanup },
-    @{ Name="Extra Cleanup"; Action={ if (-not $SkipExtraCleanup) { Extra-Cleanup } }; Skip=$SkipExtraCleanup },
-    @{ Name="Optimize Drives"; Action={ if (-not $SkipDefrag) { Optimize-Drives } }; Skip=$SkipDefrag },
-    @{ Name="CHKDSK"; Action={ if (-not $SkipChkdsk) { Schedule-CHKDSK-RepairIfNeeded } }; Skip=$SkipChkdsk },
-    @{ Name="Memory Diagnostic"; Action={ if (-not $SkipMemoryDiag) { Schedule-MemoryDiagnostic } }; Skip=$SkipMemoryDiag }
-  )
-
-  $step = 0
+  $i = 0
   foreach ($t in $tasks) {
-    $step++
-    Section $step $TotalSteps $t.Name
+    $i++
+    Section $i $TotalSteps $t.Name
     if ($t.Skip) {
       Write-Status "$($t.Name) → [SKIPPED]" "DarkYellow"
-      [void]$executed.Add("[$step/$TotalSteps] $($t.Name) → SKIPPED")
+      [void]$executed.Add("[$i/$TotalSteps] $($t.Name) → SKIPPED")
     } else {
       try {
         & $t.Action
         Write-Status "$($t.Name) → [OK]" "Green"
-        [void]$executed.Add("[$step/$TotalSteps] $($t.Name) → OK")
+        [void]$executed.Add("[$i/$TotalSteps] $($t.Name) → OK")
       } catch {
         Write-Status "$($t.Name) → [FAILED] $($_.Exception.Message)" "Red"
-        [void]$executed.Add("[$step/$TotalSteps] $($t.Name) → FAILED: $($_.Exception.Message)")
+        [void]$executed.Add("[$i/$TotalSteps] $($t.Name) → FAILED: $($_.Exception.Message)")
       }
     }
   }
@@ -225,15 +264,15 @@ try {
 
   if (-not $NoRestart) {
     if (-not $Silent) {
-      Write-Host "`nMaintenance selesai. Restart otomatis dalam 30 detik." -ForegroundColor Yellow
-      Write-Host "Tekan [A] lalu Enter untuk membatalkan restart." -ForegroundColor DarkGray
+      Write-Host "`nSelesai. Restart otomatis dalam 30 detik." -ForegroundColor Yellow
+      Write-Host "Tekan [A] lalu Enter untuk membatalkan."
       Schedule-AutoRestart
       $start = Get-Date
       while ((New-TimeSpan -Start $start -End (Get-Date)).TotalSeconds -lt 30) {
         if ($Host.UI.RawUI.KeyAvailable) {
           $key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
-          if ($key.Character -eq 'A' -or $key.Character -eq 'a') {
-            Start-Process shutdown.exe "/a" -WindowStyle Hidden
+          if ($key.Character -in @('A','a')) {
+            Start-Process shutdown.exe "/a"
             Write-Host "Restart dibatalkan." -ForegroundColor Cyan
             break
           }
@@ -242,13 +281,13 @@ try {
       }
     } else { Schedule-AutoRestart }
   } else {
-    Write-Status "NoRestart aktif — sistem tidak akan di-restart otomatis." "DarkYellow"
+    Write-Status "NoRestart aktif — tidak restart otomatis." "DarkYellow"
   }
 
   exit 0
 }
 catch {
-  Write-Host "Terjadi kesalahan fatal: $($_.Exception.Message)" -ForegroundColor Red
+  Write-Host "Kesalahan fatal: $($_.Exception.Message)" -ForegroundColor Red
   exit 1
 }
 finally {
