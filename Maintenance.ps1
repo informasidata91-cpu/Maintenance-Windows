@@ -173,12 +173,11 @@ function Optimize-Drives {
 }
 
 function Schedule-CHKDSK-RepairIfNeeded {
-  Write-Host "=== CHKDSK (scan dan penjadwalan perbaikan) ===" -ForegroundColor DarkGray
+  Write-Host "=== CHKDSK (menyeluruh) ===" -ForegroundColor DarkGray
   $systemDrive = $env:SystemDrive.TrimEnd(':')
-  Invoke-External -FilePath "cmd.exe" -Arguments "/c chkdsk $systemDrive`: /scan"
-  $scheduleRepair = $true
-  if ($scheduleRepair) { Write-Host "Scheduling CHKDSK /F at next reboot for $systemDrive`: ..." -ForegroundColor DarkGray; Invoke-External -FilePath "cmd.exe" -Arguments "/c chkntfs /C $systemDrive`:" }
+  chkdsk "$systemDrive`:\" /R | Out-Null
 }
+
 
 function Schedule-MemoryDiagnostic { Write-Host "=== Schedule Windows Memory Diagnostic ===" -ForegroundColor DarkGray; Start-Process -FilePath "$env:WINDIR\System32\mdsched.exe" -ArgumentList "/s" -Verb RunAs -WindowStyle Hidden }
 
@@ -287,3 +286,4 @@ finally {
   try { [Net.ServicePointManager]::SecurityProtocol = $OriginalProtocol } catch {}
   Stop-Log
 }
+
