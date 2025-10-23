@@ -1,6 +1,7 @@
 <#
-Version: 2.6.0 
-Focus: Compatible with PowerShell 5.1 and 7+, robust logging, adaptive SFC -> DISM -> CHKDSK online, Windows Update reset, HDD/SSD optimization.
+Version: 2.2.0.0
+Fokus: PS 5.1, logging kuat, SFC -> DISM -> CHKDSK online, reset Windows Update, optimasi HDD/SSD.
+Perbaikan: Auto-restart pakai RunAs + verifikasi ExitCode + opsi pembatalan opsional.
 #>
 
 [CmdletBinding()]
@@ -15,7 +16,8 @@ param(
   [switch]$SkipNetworkFix,
   [switch]$SkipMemoryDiag,
   [switch]$SkipExtraCleanup,
-  [switch]$NoRestart
+  [switch]$NoRestart,
+  [switch]$ForceAutoRestart   # baru: paksa tanpa jendela pembatalan
 )
 
 Set-StrictMode -Version Latest
@@ -74,7 +76,7 @@ function Stop-Log {
   Write-Host ('Log: ' + $LogFile + ' (Durasi: ' + [Math]::Round($d.TotalMinutes,2) + ' menit)') -ForegroundColor Cyan
 }
 
-# Route external processes via cmd so output goes to host/transcript
+# Jalankan proses eksternal lewat cmd agar output tampil
 function Invoke-External {
   [CmdletBinding()]
   param(
@@ -219,26 +221,44 @@ function Schedule-MemoryDiagnostic {
   Start-Process "$env:WINDIR\System32\mdsched.exe" '/s' -Verb RunAs
 }
 
+# ---- Auto Restart (diperkuat) ----
 function Schedule-AutoRestart {
-  Write-Status 'Jadwalkan restart otomatis dalam 30 detik...'
-  Start-Process shutdown.exe -ArgumentList '/r','/t','30','/c','Maintenance Windows selesai.' | Out-Null
+  param(
+    [int]$TimeoutSec = 30,
+    [string]$Comment = 'Maintenance Windows selesai.'
+  )
+  Write-Status "Jadwalkan restart otomatis dalam $TimeoutSec detik..."
+  $args = "/r /t $TimeoutSec /c `"$Comment`""
+  $p = Start-Process -FilePath "$env:WINDIR\System32\shutdown.exe" -ArgumentList $args -Verb RunAs -PassThru -WindowStyle Hidden
+  $p.WaitForExit()
+  if ($p.ExitCode -ne 0) { throw "Gagal menjadwalkan restart (exit $($p.ExitCode))." }
 }
 
-# ===== Execution =====
+function Abort-Restart {
+  try {
+    $p = Start-Process -FilePath "$env:WINDIR\System32\shutdown.exe" -ArgumentList '/a' -PassThru -WindowStyle Hidden
+    $p.WaitForExit()
+    Write-Host 'Restart dibatalkan.' -ForegroundColor Cyan
+  } catch {
+    Write-Host 'Gagal membatalkan restart.' -ForegroundColor Yellow
+  }
+}
+
+# ===== Eksekusi =====
 try {
   Ensure-Admin
   New-Log
 
   if (-not $Silent) {
-  Write-Host "==============================================="
-  Write-Host "  PEMBERITAHUAN MAINTENANCE WINDOWS"
-  Write-Host "==============================================="
-  Write-Host "Sistem akan restart otomatis setelah selesai." -ForegroundColor Yellow
-  Write-Host "Jangan mematikan komputer sebelum proses maintenance selesai." -ForegroundColor Yellow
-  Write-Host 'Proses bisa memakan waktu - simpan pekerjaan Anda.' -ForegroundColor Yellow
-  Write-Host "-----------------------------------------------"
-  Write-Host "`n*** MEMULAI MAINTENANCE WINDOWS ***" -ForegroundColor Cyan
-  
+    Write-Host "==============================================="
+    Write-Host "  PEMBERITAHUAN MAINTENANCE WINDOWS"
+    Write-Host "==============================================="
+    Write-Host "Sistem akan restart otomatis setelah selesai." -ForegroundColor Yellow
+    Write-Host "Jangan mematikan komputer sebelum proses maintenance selesai." -ForegroundColor Yellow
+    Write-Host 'Proses bisa memakan waktu - simpan pekerjaan Anda.' -ForegroundColor Yellow
+    Write-Host "-----------------------------------------------"
+    Write-Host "`n*** MEMULAI MAINTENANCE WINDOWS ***" -ForegroundColor Cyan
+
     Start-Sleep 2
   }
 
@@ -281,24 +301,39 @@ try {
   $executed | ForEach-Object { Write-Host $_ }
 
   if (-not $NoRestart) {
-    if (-not $Silent) {
+    # Jika ForceAutoRestart ATAU Silent: langsung jadwalkan tanpa jendela pembatalan interaktif
+    if ($ForceAutoRestart -or $Silent) {
+      try {
+        Schedule-AutoRestart -TimeoutSec 30 -Comment 'Maintenance Windows selesai.'
+        Start-Sleep -Seconds 2
+      } catch {
+        Write-Status 'Fallback: Restart-Computer -Force dalam 30 detik' 'DarkYellow'
+        Start-Sleep -Seconds 30
+        Restart-Computer -Force
+      }
+    } else {
       Write-Host "`nSelesai. Restart otomatis dalam 30 detik." -ForegroundColor Yellow
       Write-Host 'Tekan [A] lalu Enter untuk membatalkan.'
-      Schedule-AutoRestart
+      try {
+        Schedule-AutoRestart -TimeoutSec 30 -Comment 'Maintenance Windows selesai.'
+      } catch {
+        Write-Status 'Gagal menjadwalkan via shutdown.exe, gunakan fallback.' 'DarkYellow'
+        Start-Sleep -Seconds 30
+        Restart-Computer -Force
+        throw
+      }
+
       $start = Get-Date
       while ((New-TimeSpan -Start $start -End (Get-Date)).TotalSeconds -lt 30) {
         if ($Host.UI.RawUI.KeyAvailable) {
           $key = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
           if ($key.Character -in @('A','a')) {
-            Start-Process shutdown.exe -ArgumentList '/a' | Out-Null
-            Write-Host 'Restart dibatalkan.' -ForegroundColor Cyan
+            Abort-Restart
             break
           }
         }
         Start-Sleep -Milliseconds 200
       }
-    } else {
-      Schedule-AutoRestart
     }
   } else {
     Write-Status 'NoRestart aktif - tidak restart otomatis.' 'DarkYellow'
@@ -314,5 +349,3 @@ finally {
   try { [Net.ServicePointManager]::SecurityProtocol = $OriginalProtocol } catch {}
   Stop-Log
 }
-
-
