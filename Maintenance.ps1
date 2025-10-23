@@ -179,10 +179,37 @@ function Reset-Winsock { Write-Status 'Winsock reset...'; Invoke-External netsh.
 
 # ---- Storage optimization ----
 function Optimize-Drives {
-  Write-Status 'Analyze + Defrag/ReTrim...'
+  Write-Status 'Analyze + Defrag/ReTrim...'  # boleh dipertahankan untuk heading langkah
   $vols = Get-Volume | Where-Object { $_.DriveType -eq 'Fixed' -and $_.DriveLetter }
   foreach ($v in $vols) {
     try {
+      # Analisis tanpa output
+      Optimize-Volume -DriveLetter $v.DriveLetter -Analyze -ErrorAction SilentlyContinue *> $null | Out-Null
+
+      $dl = $v.DriveLetter
+      $isSSD = $false
+      try {
+        $pd = Get-Partition -DriveLetter $dl | Get-Disk | Get-PhysicalDisk -ErrorAction Stop
+        $isSSD = ($pd.MediaType -eq 'SSD')
+      } catch {}
+
+      if ($isSSD) {
+        Optimize-Volume -DriveLetter $dl -ReTrim -ErrorAction SilentlyContinue *> $null | Out-Null
+      } else {
+        Optimize-Volume -DriveLetter $dl -Defrag -ErrorAction SilentlyContinue *> $null | Out-Null
+      }
+    } catch {
+      # Jika ingin benar-benar senyap, baris ini juga bisa dihilangkan
+      Write-Status ('Optimize gagal ' + $v.DriveLetter + ': ' + $_.Exception.Message) 'DarkYellow'
+    }
+  }
+}
+<#
+function Optimize-Drives {
+  Write-Status 'Analyze + Defrag/ReTrim...'
+ $vols = Get-Volume | Where-Object { $_.DriveType -eq 'Fixed' -and $_.DriveLetter }
+ foreach ($v in $vols) {
+  try {
       Optimize-Volume -DriveLetter $v.DriveLetter -Analyze -Verbose -ErrorAction SilentlyContinue
       $dl = $v.DriveLetter
       $isSSD = $false
@@ -200,7 +227,7 @@ function Optimize-Drives {
     }
   }
 }
-
+#>
 # ---- CHKDSK ----
 function Chkdsk-Online-And-Schedule {
   Write-Status 'CHKDSK online /scan...'
