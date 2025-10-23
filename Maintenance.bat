@@ -14,9 +14,9 @@ timeout /t 3 >nul
 
 set "SCRIPT=Maintenance.ps1"
 set "URL=https://raw.githubusercontent.com/informasidata91-cpu/Maintenance-Windows/main/Maintenance.ps1"
+set "LOG=%~dp0maintenance-run.log"
 
-
-echo [%DATE% %TIME%] Mulai 
+echo [%DATE% %TIME%] Mulai > "%LOG%"
 
 :: 1) Cek Administrator; jika tidak, minta elevasi dengan pesan jelas
 net session >nul 2>&1
@@ -32,14 +32,14 @@ if not exist "%SCRIPT%" (
     echo [i] %SCRIPT% tidak ditemukan di folder ini.
     choice /M "Unduh dari repository resmi sekarang?"
     if errorlevel 2 (
-        echo [X] Dibatalkan. %SCRIPT% tidak ada. >
+        echo [X] Dibatalkan. %SCRIPT% tidak ada. >> "%LOG%"
         exit /b 2
     )
     echo [i] Mengunduh %SCRIPT% ...
     powershell -NoProfile -ExecutionPolicy RemoteSigned -Command ^
       "Invoke-WebRequest -Uri '%URL%' -OutFile '%SCRIPT%' -UseBasicParsing"
     if errorlevel 1 (
-        echo [X] Gagal mengunduh %SCRIPT%. >
+        echo [X] Gagal mengunduh %SCRIPT%. >> "%LOG%"
         exit /b 3
     )
 )
@@ -52,7 +52,7 @@ powershell -NoProfile -Command ^
 :: 4) Jalankan Maintenance.ps1 dengan opsi aman
 echo.
 echo Menjalankan %SCRIPT% ...
-echo [%DATE% %TIME%] Menjalankan %SCRIPT% ... >
+echo [%DATE% %TIME%] Menjalankan %SCRIPT% ... >> "%LOG%"
 powershell -NoProfile -ExecutionPolicy RemoteSigned -File "%SCRIPT%"
 set "EC=%ERRORLEVEL%"
 
@@ -60,6 +60,6 @@ echo.
 echo ================================
 echo  Maintenance script selesai.
 echo ================================
-echo [%DATE% %TIME%] Selesai dengan kode %EC% >
+echo [%DATE% %TIME%] Selesai dengan kode %EC% >> "%LOG%"
 pause
 exit /b %EC%
