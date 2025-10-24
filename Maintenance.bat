@@ -4,7 +4,7 @@ cd /d "%~dp0"
 
 cls
 echo =============================================
-echo Perawatan rutin sistem sedang dimulai...
+echo Perawatan rutin sistem sedang dimulai
 echo =============================================
 timeout /t 2 >nul
 
@@ -18,12 +18,12 @@ set "URL=https://raw.githubusercontent.com/informasidata91-cpu/Maintenance-Windo
 net session >nul 2>&1
 if %errorlevel% neq 0 (
   echo [!] Script ini memerlukan hak Administrator.
-  echo Membuka ulang dengan hak admin...
   powershell -NoProfile -Command "Start-Process '%~f0' -Verb RunAs"
   echo Jendela ini akan ditutup. Lanjutkan di jendela baru.
-  pause
   exit /b
 )
+cd /d %SystemDrive%\
+echo [i] Working directory sekarang: %CD%
 
 :: 2) Mengunduh skrip PS1 (overwrite bila ada)
 echo [i] Mengunduh Maintenance.ps1 dari repository...
