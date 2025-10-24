@@ -1,7 +1,7 @@
 <#
-Version: 2.2.0.0
+Version: 2.2.0.1
 Fokus: PS 5.1, logging kuat, SFC -> DISM -> CHKDSK online, reset Windows Update, optimasi HDD/SSD.
-Perbaikan: Auto-restart pakai RunAs + verifikasi ExitCode + opsi pembatalan opsional.
+Perbaikan: SFC parsing output untuk memicu DISM saat ada korup (meski exit code 0); fallback cek CBS.log.
 #>
 
 [CmdletBinding()]
@@ -17,7 +17,7 @@ param(
   [switch]$SkipMemoryDiag,
   [switch]$SkipExtraCleanup,
   [switch]$NoRestart,
-  [switch]$ForceAutoRestart   # baru: paksa tanpa jendela pembatalan
+  [switch]$ForceAutoRestart
 )
 
 Set-StrictMode -Version Latest
@@ -25,7 +25,7 @@ $ErrorActionPreference = 'Stop'
 $global:LogFile = 'C:\MaintenanceLog.txt'
 $script:StartTime = Get-Date
 
-# TLS (PS 7+: SystemDefault; PS 5.1: TLS 1.2)
+# TLS
 $OriginalProtocol = [Net.ServicePointManager]::SecurityProtocol
 try {
   if ($PSVersionTable.PSVersion.Major -ge 7) {
@@ -113,9 +113,34 @@ function Section($i,$t,$name){
 # ---- Integrity (SFC/DISM) ----
 function Run-SFC {
   Write-Status 'SFC /Scannow...'
-  Invoke-External sfc.exe '/scannow'
-  return $LASTEXITCODE
+  # Tangkap output untuk deteksi korup meski exit code 0
+  $psi = New-Object System.Diagnostics.ProcessStartInfo
+  $psi.FileName  = 'cmd.exe'
+  $psi.Arguments = '/c sfc.exe /scannow'
+  $psi.UseShellExecute = $false
+  $psi.RedirectStandardOutput = $true
+  $psi.RedirectStandardError  = $true
+  $psi.CreateNoWindow = $true
+  $p = [System.Diagnostics.Process]::Start($psi)
+  $stdout = $p.StandardOutput.ReadToEnd()
+  $stderr = $p.StandardError.ReadToEnd()
+  $p.WaitForExit()
+
+  $outFile = Join-Path $env:TEMP ("sfc_out_{0}.log" -f (Get-Date -Format 'yyyyMMdd_HHmmss'))
+  try {
+    $stdout | Out-File -FilePath $outFile -Encoding UTF8 -Force
+    if ($stderr) { $stderr | Out-File -FilePath $outFile -Append -Encoding UTF8 }
+    Write-Status ("Log SFC -> " + $outFile) 'DarkCyan'
+  } catch {}
+
+  $foundCorrupt = $false
+  if ($stdout -match 'Windows Resource Protection found corrupt files') { $foundCorrupt = $true }
+  if ($stdout -match 'unable to fix' -or $stdout -match 'successfully repaired') { $foundCorrupt = $true }
+
+  # Kembalikan 1 jika ada indikasi korup (agar memicu DISM), selain itu pakai exit code asli
+  if ($foundCorrupt) { return 1 } else { return $p.ExitCode }
 }
+
 function Run-DISM-3 {
   Write-Status 'DISM CheckHealth...'
   Invoke-External dism.exe '/Online /Cleanup-Image /CheckHealth'
@@ -179,38 +204,11 @@ function Reset-Winsock { Write-Status 'Winsock reset...'; Invoke-External netsh.
 
 # ---- Storage optimization ----
 function Optimize-Drives {
-  Write-Status 'Analyze + Defrag/ReTrim...'  # boleh dipertahankan untuk heading langkah
+  Write-Status 'Analyze + Defrag/ReTrim...'
   $vols = Get-Volume | Where-Object { $_.DriveType -eq 'Fixed' -and $_.DriveLetter }
   foreach ($v in $vols) {
     try {
-      # Analisis tanpa output
-      Optimize-Volume -DriveLetter $v.DriveLetter -Analyze -ErrorAction SilentlyContinue *> $null | Out-Null
-
-      $dl = $v.DriveLetter
-      $isSSD = $false
-      try {
-        $pd = Get-Partition -DriveLetter $dl | Get-Disk | Get-PhysicalDisk -ErrorAction Stop
-        $isSSD = ($pd.MediaType -eq 'SSD')
-      } catch {}
-
-      if ($isSSD) {
-        Optimize-Volume -DriveLetter $dl -ReTrim -ErrorAction SilentlyContinue *> $null | Out-Null
-      } else {
-        Optimize-Volume -DriveLetter $dl -Defrag -ErrorAction SilentlyContinue *> $null | Out-Null
-      }
-    } catch {
-      # Jika ingin benar-benar senyap, baris ini juga bisa dihilangkan
-      Write-Status ('Optimize gagal ' + $v.DriveLetter + ': ' + $_.Exception.Message) 'DarkYellow'
-    }
-  }
-}
-<#
-function Optimize-Drives {
-  Write-Status 'Analyze + Defrag/ReTrim...'
- $vols = Get-Volume | Where-Object { $_.DriveType -eq 'Fixed' -and $_.DriveLetter }
- foreach ($v in $vols) {
-  try {
-      Optimize-Volume -DriveLetter $v.DriveLetter -Analyze -Verbose -ErrorAction SilentlyContinue
+      Optimize-Volume -DriveLetter $v.DriveLetter -Analyze -ErrorAction SilentlyContinue 4> $null
       $dl = $v.DriveLetter
       $isSSD = $false
       try {
@@ -218,16 +216,16 @@ function Optimize-Drives {
         $isSSD = ($pd.MediaType -eq 'SSD')
       } catch {}
       if ($isSSD) {
-        Optimize-Volume -DriveLetter $dl -ReTrim -Verbose -ErrorAction SilentlyContinue
+        Optimize-Volume -DriveLetter $dl -ReTrim -ErrorAction SilentlyContinue 4> $null
       } else {
-        Optimize-Volume -DriveLetter $dl -Defrag -Verbose -ErrorAction SilentlyContinue
+        Optimize-Volume -DriveLetter $dl -Defrag -ErrorAction SilentlyContinue 4> $null
       }
     } catch {
       Write-Status ('Optimize gagal ' + $v.DriveLetter + ': ' + $_.Exception.Message) 'DarkYellow'
     }
   }
 }
-#>
+
 # ---- CHKDSK ----
 function Chkdsk-Online-And-Schedule {
   Write-Status 'CHKDSK online /scan...'
@@ -285,15 +283,26 @@ try {
     Write-Host 'Proses bisa memakan waktu - simpan pekerjaan Anda.' -ForegroundColor Yellow
     Write-Host "-----------------------------------------------"
     Write-Host "`n*** MEMULAI MAINTENANCE WINDOWS ***" -ForegroundColor Cyan
-
     Start-Sleep 2
   }
 
   $tasks = @(
     @{ Name='SFC'; Action={ if (-not $SkipSFC) { $script:SfcExit = Run-SFC } }; Skip=$SkipSFC },
-    @{ Name='DISM 3-step (kondisional)'; Action={ if (-not $SkipDISM) {
-        if ($script:SfcExit -ne 0) { Run-DISM-3 } else { Write-Status 'SFC OK; DISM dilewati (tidak diperlukan)' }
-      } }; Skip=$SkipDISM },
+    @{ Name='DISM 3-step (kondisional)'; Action={
+        if (-not $SkipDISM) {
+          $needDism = ($script:SfcExit -ne 0)
+          # Fallback: baca CBS.log bila SFC exit 0 tapi ada indikasi korup
+          try {
+            $cbsPath = "$env:WINDIR\Logs\CBS\CBS.log"
+            if (Test-Path $cbsPath) {
+              $cbs = Get-Content $cbsPath -ErrorAction SilentlyContinue -Tail 2000 -Raw
+              if ($cbs -match 'Windows Resource Protection found corrupt files') { $needDism = $true }
+              if ($cbs -match 'unable to fix') { $needDism = $true }
+            }
+          } catch {}
+          if ($needDism) { Run-DISM-3 } else { Write-Status 'SFC OK; DISM dilewati (tidak diperlukan)' }
+        }
+      }; Skip=$SkipDISM },
     @{ Name='Reset Windows Update'; Action={ if (-not $SkipWUReset) { Reset-WindowsUpdate } }; Skip=$SkipWUReset },
     @{ Name='Network Fix'; Action={ if (-not $SkipNetworkFix) { Flush-DNS; Reset-Winsock } }; Skip=$SkipNetworkFix },
     @{ Name='Disk Cleanup'; Action={ if (-not $SkipCleanup) { Run-Cleanup } }; Skip=$SkipCleanup },
@@ -328,7 +337,6 @@ try {
   $executed | ForEach-Object { Write-Host $_ }
 
   if (-not $NoRestart) {
-    # Jika ForceAutoRestart ATAU Silent: langsung jadwalkan tanpa jendela pembatalan interaktif
     if ($ForceAutoRestart -or $Silent) {
       try {
         Schedule-AutoRestart -TimeoutSec 30 -Comment 'Maintenance Windows selesai.'
@@ -349,7 +357,6 @@ try {
         Restart-Computer -Force
         throw
       }
-
       $start = Get-Date
       while ((New-TimeSpan -Start $start -End (Get-Date)).TotalSeconds -lt 30) {
         if ($Host.UI.RawUI.KeyAvailable) {
@@ -376,161 +383,3 @@ finally {
   try { [Net.ServicePointManager]::SecurityProtocol = $OriginalProtocol } catch {}
   Stop-Log
 }
-
-# SIG # Begin signature block
-# MIIdAAYJKoZIhvcNAQcCoIIc8TCCHO0CAQExDzANBglghkgBZQMEAgEFADB5Bgor
-# BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCaek6SNQas7G+/
-# kFgpaX4mBMnjOw/o7QE+MGMtPmC2U6CCAwYwggMCMIIB6qADAgECAhAZrzFe5u2H
-# lEcnVFobyhgaMA0GCSqGSIb3DQEBCwUAMBkxFzAVBgNVBAMMDkRhdGEgSW5mb3Jt
-# YXNpMB4XDTI1MTAxNDE1MDY0NFoXDTI2MTAxNDE1MjY0NFowGTEXMBUGA1UEAwwO
-# RGF0YSBJbmZvcm1hc2kwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQDK
-# KOimn/rO8oquB3IYQEvPkdJ5mk5sM5BQhPXAsw+MsNN2eS59bRCOTpPNU7QYGH0i
-# nV4zl4J8Q2nn8PYBHpfB7qnpF6o0R2FmKvtyXm5h5BL960t32AdVKvTaNTdVePem
-# fFctHs0ccSG+/prTtFRpSDCgGc/hwTfgyVZXqycYHowKMtpW+nCXbm+WR2ccvzPF
-# IgMMBBNidBqKLG+tx8XpuTpqefWd3JNSLsG7kbqEMoW4Eb0LBoWHTtTANrCJIrkG
-# 8i6uaByVFNql8FLDEkXOZkETIEMQrS2JmV1bNI0npFLGmtNc1aTB+4DXjLF8H9By
-# 2SgfKggcJyUCIzUFkqrVAgMBAAGjRjBEMA4GA1UdDwEB/wQEAwIHgDATBgNVHSUE
-# DDAKBggrBgEFBQcDAzAdBgNVHQ4EFgQUwj6ufSrvSADxwHh0EWvwUdQSFlowDQYJ
-# KoZIhvcNAQELBQADggEBAAzmRmgUe2ADXtL1u9xHH7lQ2dJRWq/7g3mJ2BVFXxRB
-# mWtxs7f2J70Amk0bvPfCLYCX61niK2h/27jyx361NDfe9QEh2ql6wgYzZZDat299
-# U1X9pIQn3YRZ5Vz2ckM08Y1eS4E0W3Jfbvbbp9x4q8UWJA9J6CfYAhYPnAQXyhU3
-# cHiwk7EUlvsa/nYZBdLobz3nUfXgtIPd42Wgnh3DFrwjLNlwtQgg28jkBdj/3PIH
-# P0ZUE45RFsm0fX9WL8hA5WEBN4KPrwKu6sjcjpsFPiQIVoRTkG2u6wGMJVwXKdCu
-# g1ej/ogMNB8uWwOhfu6Wd8gDLFKi8n/r5UJPJ41VqGQxghlQMIIZTAIBATAtMBkx
-# FzAVBgNVBAMMDkRhdGEgSW5mb3JtYXNpAhAZrzFe5u2HlEcnVFobyhgaMA0GCWCG
-# SAFlAwQCAQUAoHwwEAYKKwYBBAGCNwIBDDECMAAwGQYJKoZIhvcNAQkDMQwGCisG
-# AQQBgjcCAQQwHAYKKwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcN
-# AQkEMSIEIB6yWRQosZD0U3vOqnXFOV+U6REKeSFkTakSxA1aohoOMA0GCSqGSIb3
-# DQEBAQUABIIBAAuFcXNuQDaKmPhot1UbxOWjR6503s771Naz80GuJNlH2IpqXKnH
-# gJa2kiA1GHWEV56y7B3OUM+IXHaETmRB918sjxqwFCsqRt+9yJWR2qY7BZCj/3o/
-# 4o7z6N4LNpml0UV7wmkavuPs1F8o0cWaPBpGzfsc1VYrW2UtibOOdsqBX/g1vED2
-# uvh/NLt++ds5/TK7LpD2mZDUHcun5lt+fEEfRAhVjJIU5F7noFiqZf5f2ydaDCYs
-# EqRZ+SX2jwLhXj0IKq3cPU6wxKZV6MXAUvHXYM7rSP7DvKcY+i+HYDxlq30As+vV
-# aLNpvSYT3iiW3jwJomPNETnwHl7sO1St1mGhghd2MIIXcgYKKwYBBAGCNwMDATGC
-# F2IwghdeBgkqhkiG9w0BBwKgghdPMIIXSwIBAzEPMA0GCWCGSAFlAwQCAQUAMHcG
-# CyqGSIb3DQEJEAEEoGgEZjBkAgEBBglghkgBhv1sBwEwMTANBglghkgBZQMEAgEF
-# AAQgWdZk3en6t+Sj0k/sht/WPvxv/Xe0HhWJx+NB1YHEK+gCEC/FkbPAdJ/xmXdb
-# OZdpYuoYDzIwMjUxMDIzMTExODAyWqCCEzowggbtMIIE1aADAgECAhAKgO8YS43x
-# BYLRxHanlXRoMA0GCSqGSIb3DQEBCwUAMGkxCzAJBgNVBAYTAlVTMRcwFQYDVQQK
-# Ew5EaWdpQ2VydCwgSW5jLjFBMD8GA1UEAxM4RGlnaUNlcnQgVHJ1c3RlZCBHNCBU
-# aW1lU3RhbXBpbmcgUlNBNDA5NiBTSEEyNTYgMjAyNSBDQTEwHhcNMjUwNjA0MDAw
-# MDAwWhcNMzYwOTAzMjM1OTU5WjBjMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGln
-# aUNlcnQsIEluYy4xOzA5BgNVBAMTMkRpZ2lDZXJ0IFNIQTI1NiBSU0E0MDk2IFRp
-# bWVzdGFtcCBSZXNwb25kZXIgMjAyNSAxMIICIjANBgkqhkiG9w0BAQEFAAOCAg8A
-# MIICCgKCAgEA0EasLRLGntDqrmBWsytXum9R/4ZwCgHfyjfMGUIwYzKomd8U1nH7
-# C8Dr0cVMF3BsfAFI54um8+dnxk36+jx0Tb+k+87H9WPxNyFPJIDZHhAqlUPt281m
-# HrBbZHqRK71Em3/hCGC5KyyneqiZ7syvFXJ9A72wzHpkBaMUNg7MOLxI6E9RaUue
-# HTQKWXymOtRwJXcrcTTPPT2V1D/+cFllESviH8YjoPFvZSjKs3SKO1QNUdFd2adw
-# 44wDcKgH+JRJE5Qg0NP3yiSyi5MxgU6cehGHr7zou1znOM8odbkqoK+lJ25LCHBS
-# ai25CFyD23DZgPfDrJJJK77epTwMP6eKA0kWa3osAe8fcpK40uhktzUd/Yk0xUvh
-# DU6lvJukx7jphx40DQt82yepyekl4i0r8OEps/FNO4ahfvAk12hE5FVs9HVVWcO5
-# J4dVmVzix4A77p3awLbr89A90/nWGjXMGn7FQhmSlIUDy9Z2hSgctaepZTd0ILIU
-# bWuhKuAeNIeWrzHKYueMJtItnj2Q+aTyLLKLM0MheP/9w6CtjuuVHJOVoIJ/DtpJ
-# RE7Ce7vMRHoRon4CWIvuiNN1Lk9Y+xZ66lazs2kKFSTnnkrT3pXWETTJkhd76CID
-# BbTRofOsNyEhzZtCGmnQigpFHti58CSmvEyJcAlDVcKacJ+A9/z7eacCAwEAAaOC
-# AZUwggGRMAwGA1UdEwEB/wQCMAAwHQYDVR0OBBYEFOQ7/PIx7f391/ORcWMZUEPP
-# YYzoMB8GA1UdIwQYMBaAFO9vU0rp5AZ8esrikFb2L9RJ7MtOMA4GA1UdDwEB/wQE
-# AwIHgDAWBgNVHSUBAf8EDDAKBggrBgEFBQcDCDCBlQYIKwYBBQUHAQEEgYgwgYUw
-# JAYIKwYBBQUHMAGGGGh0dHA6Ly9vY3NwLmRpZ2ljZXJ0LmNvbTBdBggrBgEFBQcw
-# AoZRaHR0cDovL2NhY2VydHMuZGlnaWNlcnQuY29tL0RpZ2lDZXJ0VHJ1c3RlZEc0
-# VGltZVN0YW1waW5nUlNBNDA5NlNIQTI1NjIwMjVDQTEuY3J0MF8GA1UdHwRYMFYw
-# VKBSoFCGTmh0dHA6Ly9jcmwzLmRpZ2ljZXJ0LmNvbS9EaWdpQ2VydFRydXN0ZWRH
-# NFRpbWVTdGFtcGluZ1JTQTQwOTZTSEEyNTYyMDI1Q0ExLmNybDAgBgNVHSAEGTAX
-# MAgGBmeBDAEEAjALBglghkgBhv1sBwEwDQYJKoZIhvcNAQELBQADggIBAGUqrfEc
-# JwS5rmBB7NEIRJ5jQHIh+OT2Ik/bNYulCrVvhREafBYF0RkP2AGr181o2YWPoSHz
-# 9iZEN/FPsLSTwVQWo2H62yGBvg7ouCODwrx6ULj6hYKqdT8wv2UV+Kbz/3ImZlJ7
-# YXwBD9R0oU62PtgxOao872bOySCILdBghQ/ZLcdC8cbUUO75ZSpbh1oipOhcUT8l
-# D8QAGB9lctZTTOJM3pHfKBAEcxQFoHlt2s9sXoxFizTeHihsQyfFg5fxUFEp7W42
-# fNBVN4ueLaceRf9Cq9ec1v5iQMWTFQa0xNqItH3CPFTG7aEQJmmrJTV3Qhtfparz
-# +BW60OiMEgV5GWoBy4RVPRwqxv7Mk0Sy4QHs7v9y69NBqycz0BZwhB9WOfOu/CIJ
-# nzkQTwtSSpGGhLdjnQ4eBpjtP+XB3pQCtv4E5UCSDag6+iX8MmB10nfldPF9SVD7
-# weCC3yXZi/uuhqdwkgVxuiMFzGVFwYbQsiGnoa9F5AaAyBjFBtXVLcKtapnMG3VH
-# 3EmAp/jsJ3FVF3+d1SVDTmjFjLbNFZUWMXuZyvgLfgyPehwJVxwC+UpX2MSey2ue
-# Iu9THFVkT+um1vshETaWyQo8gmBto/m3acaP9QsuLj3FNwFlTxq25+T4QwX9xa6I
-# Ls84ZPvmpovq90K8eWyG2N01c4IhSOxqt81nMIIGtDCCBJygAwIBAgIQDcesVwX/
-# IZkuQEMiDDpJhjANBgkqhkiG9w0BAQsFADBiMQswCQYDVQQGEwJVUzEVMBMGA1UE
-# ChMMRGlnaUNlcnQgSW5jMRkwFwYDVQQLExB3d3cuZGlnaWNlcnQuY29tMSEwHwYD
-# VQQDExhEaWdpQ2VydCBUcnVzdGVkIFJvb3QgRzQwHhcNMjUwNTA3MDAwMDAwWhcN
-# MzgwMTE0MjM1OTU5WjBpMQswCQYDVQQGEwJVUzEXMBUGA1UEChMORGlnaUNlcnQs
-# IEluYy4xQTA/BgNVBAMTOERpZ2lDZXJ0IFRydXN0ZWQgRzQgVGltZVN0YW1waW5n
-# IFJTQTQwOTYgU0hBMjU2IDIwMjUgQ0ExMIICIjANBgkqhkiG9w0BAQEFAAOCAg8A
-# MIICCgKCAgEAtHgx0wqYQXK+PEbAHKx126NGaHS0URedTa2NDZS1mZaDLFTtQ2oR
-# jzUXMmxCqvkbsDpz4aH+qbxeLho8I6jY3xL1IusLopuW2qftJYJaDNs1+JH7Z+Qd
-# SKWM06qchUP+AbdJgMQB3h2DZ0Mal5kYp77jYMVQXSZH++0trj6Ao+xh/AS7sQRu
-# QL37QXbDhAktVJMQbzIBHYJBYgzWIjk8eDrYhXDEpKk7RdoX0M980EpLtlrNyHw0
-# Xm+nt5pnYJU3Gmq6bNMI1I7Gb5IBZK4ivbVCiZv7PNBYqHEpNVWC2ZQ8BbfnFRQV
-# ESYOszFI2Wv82wnJRfN20VRS3hpLgIR4hjzL0hpoYGk81coWJ+KdPvMvaB0WkE/2
-# qHxJ0ucS638ZxqU14lDnki7CcoKCz6eum5A19WZQHkqUJfdkDjHkccpL6uoG8pbF
-# 0LJAQQZxst7VvwDDjAmSFTUms+wV/FbWBqi7fTJnjq3hj0XbQcd8hjj/q8d6ylgx
-# CZSKi17yVp2NL+cnT6Toy+rN+nM8M7LnLqCrO2JP3oW//1sfuZDKiDEb1AQ8es9X
-# r/u6bDTnYCTKIsDq1BtmXUqEG1NqzJKS4kOmxkYp2WyODi7vQTCBZtVFJfVZ3j7O
-# gWmnhFr4yUozZtqgPrHRVHhGNKlYzyjlroPxul+bgIspzOwbtmsgY1MCAwEAAaOC
-# AV0wggFZMBIGA1UdEwEB/wQIMAYBAf8CAQAwHQYDVR0OBBYEFO9vU0rp5AZ8esri
-# kFb2L9RJ7MtOMB8GA1UdIwQYMBaAFOzX44LScV1kTN8uZz/nupiuHA9PMA4GA1Ud
-# DwEB/wQEAwIBhjATBgNVHSUEDDAKBggrBgEFBQcDCDB3BggrBgEFBQcBAQRrMGkw
-# JAYIKwYBBQUHMAGGGGh0dHA6Ly9vY3NwLmRpZ2ljZXJ0LmNvbTBBBggrBgEFBQcw
-# AoY1aHR0cDovL2NhY2VydHMuZGlnaWNlcnQuY29tL0RpZ2lDZXJ0VHJ1c3RlZFJv
-# b3RHNC5jcnQwQwYDVR0fBDwwOjA4oDagNIYyaHR0cDovL2NybDMuZGlnaWNlcnQu
-# Y29tL0RpZ2lDZXJ0VHJ1c3RlZFJvb3RHNC5jcmwwIAYDVR0gBBkwFzAIBgZngQwB
-# BAIwCwYJYIZIAYb9bAcBMA0GCSqGSIb3DQEBCwUAA4ICAQAXzvsWgBz+Bz0RdnEw
-# vb4LyLU0pn/N0IfFiBowf0/Dm1wGc/Do7oVMY2mhXZXjDNJQa8j00DNqhCT3t+s8
-# G0iP5kvN2n7Jd2E4/iEIUBO41P5F448rSYJ59Ib61eoalhnd6ywFLerycvZTAz40
-# y8S4F3/a+Z1jEMK/DMm/axFSgoR8n6c3nuZB9BfBwAQYK9FHaoq2e26MHvVY9gCD
-# A/JYsq7pGdogP8HRtrYfctSLANEBfHU16r3J05qX3kId+ZOczgj5kjatVB+NdADV
-# ZKON/gnZruMvNYY2o1f4MXRJDMdTSlOLh0HCn2cQLwQCqjFbqrXuvTPSegOOzr4E
-# Wj7PtspIHBldNE2K9i697cvaiIo2p61Ed2p8xMJb82Yosn0z4y25xUbI7GIN/TpV
-# fHIqQ6Ku/qjTY6hc3hsXMrS+U0yy+GWqAXam4ToWd2UQ1KYT70kZjE4YtL8Pbzg0
-# c1ugMZyZZd/BdHLiRu7hAWE6bTEm4XYRkA6Tl4KSFLFk43esaUeqGkH/wyW4N7Oi
-# gizwJWeukcyIPbAvjSabnf7+Pu0VrFgoiovRDiyx3zEdmcif/sYQsfch28bZeUz2
-# rtY/9TCA6TD8dC3JE3rYkrhLULy7Dc90G6e8BlqmyIjlgp2+VqsS9/wQD7yFylIz
-# 0scmbKvFoW2jNrbM1pD2T7m3XDCCBY0wggR1oAMCAQICEA6bGI750C3n79tQ4ghA
-# GFowDQYJKoZIhvcNAQEMBQAwZTELMAkGA1UEBhMCVVMxFTATBgNVBAoTDERpZ2lD
-# ZXJ0IEluYzEZMBcGA1UECxMQd3d3LmRpZ2ljZXJ0LmNvbTEkMCIGA1UEAxMbRGln
-# aUNlcnQgQXNzdXJlZCBJRCBSb290IENBMB4XDTIyMDgwMTAwMDAwMFoXDTMxMTEw
-# OTIzNTk1OVowYjELMAkGA1UEBhMCVVMxFTATBgNVBAoTDERpZ2lDZXJ0IEluYzEZ
-# MBcGA1UECxMQd3d3LmRpZ2ljZXJ0LmNvbTEhMB8GA1UEAxMYRGlnaUNlcnQgVHJ1
-# c3RlZCBSb290IEc0MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAv+aQ
-# c2jeu+RdSjwwIjBpM+zCpyUuySE98orYWcLhKac9WKt2ms2uexuEDcQwH/MbpDgW
-# 61bGl20dq7J58soR0uRf1gU8Ug9SH8aeFaV+vp+pVxZZVXKvaJNwwrK6dZlqczKU
-# 0RBEEC7fgvMHhOZ0O21x4i0MG+4g1ckgHWMpLc7sXk7Ik/ghYZs06wXGXuxbGrzr
-# yc/NrDRAX7F6Zu53yEioZldXn1RYjgwrt0+nMNlW7sp7XeOtyU9e5TXnMcvak17c
-# jo+A2raRmECQecN4x7axxLVqGDgDEI3Y1DekLgV9iPWCPhCRcKtVgkEy19sEcypu
-# kQF8IUzUvK4bA3VdeGbZOjFEmjNAvwjXWkmkwuapoGfdpCe8oU85tRFYF/ckXEaP
-# ZPfBaYh2mHY9WV1CdoeJl2l6SPDgohIbZpp0yt5LHucOY67m1O+SkjqePdwA5EUl
-# ibaaRBkrfsCUtNJhbesz2cXfSwQAzH0clcOP9yGyshG3u3/y1YxwLEFgqrFjGESV
-# GnZifvaAsPvoZKYz0YkH4b235kOkGLimdwHhD5QMIR2yVCkliWzlDlJRR3S+Jqy2
-# QXXeeqxfjT/JvNNBERJb5RBQ6zHFynIWIgnffEx1P2PsIV/EIFFrb7GrhotPwtZF
-# X50g/KEexcCPorF+CiaZ9eRpL5gdLfXZqbId5RsCAwEAAaOCATowggE2MA8GA1Ud
-# EwEB/wQFMAMBAf8wHQYDVR0OBBYEFOzX44LScV1kTN8uZz/nupiuHA9PMB8GA1Ud
-# IwQYMBaAFEXroq/0ksuCMS1Ri6enIZ3zbcgPMA4GA1UdDwEB/wQEAwIBhjB5Bggr
-# BgEFBQcBAQRtMGswJAYIKwYBBQUHMAGGGGh0dHA6Ly9vY3NwLmRpZ2ljZXJ0LmNv
-# bTBDBggrBgEFBQcwAoY3aHR0cDovL2NhY2VydHMuZGlnaWNlcnQuY29tL0RpZ2lD
-# ZXJ0QXNzdXJlZElEUm9vdENBLmNydDBFBgNVHR8EPjA8MDqgOKA2hjRodHRwOi8v
-# Y3JsMy5kaWdpY2VydC5jb20vRGlnaUNlcnRBc3N1cmVkSURSb290Q0EuY3JsMBEG
-# A1UdIAQKMAgwBgYEVR0gADANBgkqhkiG9w0BAQwFAAOCAQEAcKC/Q1xV5zhfoKN0
-# Gz22Ftf3v1cHvZqsoYcs7IVeqRq7IviHGmlUIu2kiHdtvRoU9BNKei8ttzjv9P+A
-# ufih9/Jy3iS8UgPITtAq3votVs/59PesMHqai7Je1M/RQ0SbQyHrlnKhSLSZy51P
-# pwYDE3cnRNTnf+hZqPC/Lwum6fI0POz3A8eHqNJMQBk1RmppVLC4oVaO7KTVPeix
-# 3P0c2PR3WlxUjG/voVA9/HYJaISfb8rbII01YBwCA8sgsKxYoA5AY8WYIsGyWfVV
-# a88nq2x2zm8jLfR+cWojayL/ErhULSd+2DrZ8LaHlv1b0VysGMNNn3O3AamfV6pe
-# KOK5lDGCA3wwggN4AgEBMH0waTELMAkGA1UEBhMCVVMxFzAVBgNVBAoTDkRpZ2lD
-# ZXJ0LCBJbmMuMUEwPwYDVQQDEzhEaWdpQ2VydCBUcnVzdGVkIEc0IFRpbWVTdGFt
-# cGluZyBSU0E0MDk2IFNIQTI1NiAyMDI1IENBMQIQCoDvGEuN8QWC0cR2p5V0aDAN
-# BglghkgBZQMEAgEFAKCB0TAaBgkqhkiG9w0BCQMxDQYLKoZIhvcNAQkQAQQwHAYJ
-# KoZIhvcNAQkFMQ8XDTI1MTAyMzExMTgwMlowKwYLKoZIhvcNAQkQAgwxHDAaMBgw
-# FgQU3WIwrIYKLTBr2jixaHlSMAf7QX4wLwYJKoZIhvcNAQkEMSIEIAVfdOgfrhET
-# rzc9xcEIDueCOU4a7R/OwqYPOgw/mTIpMDcGCyqGSIb3DQEJEAIvMSgwJjAkMCIE
-# IEqgP6Is11yExVyTj4KOZ2ucrsqzP+NtJpqjNPFGEQozMA0GCSqGSIb3DQEBAQUA
-# BIICAIwytQcsM+0+QEkRnH8sInRxBQMxjQWD/L2ByUMawRA/CjYSfLlFw5Na5y1c
-# se4VySk3ehT+IQhFIk5pCkozSAcMg1zksbVuDWCBEtLf39Ay1pMERecHK2PUOtc7
-# PH5qLQFpL4O55UVfJP/RBlM5IXQg9uHkJQFkO4gvxo1upVpcjrMM7Q5l1JY5gG3k
-# qw+eq+TyNY+tGLLUKJl5oSL4lnnWyXcI8Pv1hIg5R6WXD3aW0zK4qIfipBlHgi6J
-# ckqkIlHkh3jgFHG0/jy4XH0tTkMURpgZ9kIeJqCAZ/3BuKFdOLgwevwso9OiB3dp
-# ATcT8i1CVKquPCE4XMY4vY5adpi9tXPg1JRCk9w6ZaKnkhkl8o/v26xBsFW1XOMv
-# +ck16nGiuB0jBd5IM1iVf3sahCqewzNVjnj3xhtztgXZeONrnI9Gi72PFQBulOew
-# tnce2kRGwQb5rqKkMy/potKNK6kIpXnJp4tE5y2Ww9OXBeMNbxUdumdXfYbqF3V2
-# za3xoWgijnXDNSZ1tCpuSL1sDUKFqwU+EpwCKW1lzh8fGDbOAZDKkdwpsjvIBVpH
-# B+Guw1FRRtHKWhatG/4RtQIsC7tC7V2ecrNGlBJXBnmAxcCfcvz5tc8H8JQwJIgS
-# wtICXaFfeIMvYKh1SN8zf19V5laDakF66818qjchw3EhkaQx
-# SIG # End signature block
