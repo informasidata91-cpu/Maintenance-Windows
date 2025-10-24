@@ -40,8 +40,7 @@ if not exist "%SCRIPT%" (
 )
 
 :: 3) Set Execution Policy sementara (Scope=Process)
-powershell -NoProfile -Command ^
-"Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned -Force" 1>nul 2>nul
+powershell -NoProfile -Command "Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned -Force *> $null"
 
 :: 4) Jalankan Maintenance.ps1 dengan opsi aman
 echo.
