@@ -1,7 +1,7 @@
 # Windows Maintenance Script - Silent Automated Mode  
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Build Status](https://img.shields.io/badge/Status-Stable-success.svg)](https://github.com/informasidata91-cpu/Maintenance-Windows)
-[![Made with PowerShell | CMD](https://img.shields.io/badge/Made%20with-PowerShell%20%7C%20CMD-5391FE.svg?logo=powershell&logoColor=white)](https://learn.microsoft.com/en-us/powershell/) ![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-blue.svg)
+[![Made with PowerShell | CMD](https://img.shields.io/badge/Made%20with-PowerShell%20%7C%20CMD-5391FE.svg?logo=powershell&logoColor=white)](https://learn.microsoft.com/en-us/powershell/) 
 ![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-blue.svg)
 ![Version](https://img.shields.io/badge/Version-1.3.1.0-lightgrey.svg)
 ![Maintenance](https://img.shields.io/badge/Auto%20Maintenance-Enabled-green.svg)
