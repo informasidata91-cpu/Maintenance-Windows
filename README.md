@@ -1,9 +1,9 @@
 # Windows Maintenance Script - Silent Automated Mode  
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Build Status](https://img.shields.io/badge/Status-Stable-success.svg)](https://github.com/informasidata91-cpu/Maintenance-Windows)
-[![Made with PowerShell](https://img.shields.io/badge/Made%20with-PowerShell-5391FE.svg)](https://learn.microsoft.com/en-us/powershell/)
+[![Made with PowerShell | CMD](https://img.shields.io/badge/Made%20with-PowerShell%20%7C%20CMD-5391FE.svg?logo=powershell&logoColor=white)](https://learn.microsoft.com/en-us/powershell/) 
 ![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-blue.svg)
-![Version](https://img.shields.io/badge/Version-1.0-lightgrey.svg)
+![Version](https://img.shields.io/badge/Version-1.3.1.0-lightgrey.svg)
 ![Maintenance](https://img.shields.io/badge/Auto%20Maintenance-Enabled-green.svg)
 ________________________________________
 ## Deskripsi  
@@ -165,6 +165,10 @@ Karena proses dan biayanya tidak sederhana, banyak proyek **independen, non-kome
 
 > 💡 **Kesimpulan:**  
 > File **Maintenance.exe** aman digunakan apabila diunduh langsung dari repositori resmi ini. Peringatan SmartScreen hanyalah bagian dari mekanisme perlindungan standar Windows terhadap file tanpa sertifikat digital, **bukan indikasi bahwa file berbahaya**.
+---  
+## Unduh Rilis (Releases)  
+Halaman Releases adalah pusat distribusi versi aplikasi ini yang dikemas berdasarkan tag Git; di sana Anda dapat membaca ringkasan perubahan setiap versi dan mengunduh aset siap pakai (mis. .exe, .zip) tanpa perlu membangun dari sumber. Rilis yang diberi label “Latest” menandai versi terbaru yang direkomendasikan, sementara beberapa entri dapat ditandai sebagai “Pre-release” jika masih tahap uji. Keamanan dan integritas asal rilis ditingkatkan dengan penanda “Verified” pada komit/tag yang ditandatangani secara kriptografis, sehingga Anda dapat memverifikasi sumber sebelum mengunduh. Untuk selalu menuju versi terbaru, gunakan tautan berikut:  
+[![GitHub Releases](https://img.shields.io/github/v/release/informasidata91-cpu/Maintenance-Windows?display_name=release&sort=semver&color=blue&logo=github)](https://github.com/informasidata91-cpu/Maintenance-Windows/releases/latest) .  
 
 --- 
 ## Disclaimer  
