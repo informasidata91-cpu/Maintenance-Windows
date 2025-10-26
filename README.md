@@ -165,6 +165,10 @@ Karena proses dan biayanya tidak sederhana, banyak proyek **independen, non-kome
 
 > 💡 **Kesimpulan:**  
 > File **Maintenance.exe** aman digunakan apabila diunduh langsung dari repositori resmi ini. Peringatan SmartScreen hanyalah bagian dari mekanisme perlindungan standar Windows terhadap file tanpa sertifikat digital, **bukan indikasi bahwa file berbahaya**.
+---  
+## Unduh Rilis (Releases)  
+Halaman Releases adalah pusat distribusi versi aplikasi ini yang dikemas berdasarkan tag Git; di sana Anda dapat membaca ringkasan perubahan setiap versi dan mengunduh aset siap pakai (mis. .exe, .zip) tanpa perlu membangun dari sumber. Rilis yang diberi label “Latest” menandai versi terbaru yang direkomendasikan, sementara beberapa entri dapat ditandai sebagai “Pre-release” jika masih tahap uji. Keamanan dan integritas asal rilis ditingkatkan dengan penanda “Verified” pada komit/tag yang ditandatangani secara kriptografis, sehingga Anda dapat memverifikasi sumber sebelum mengunduh. Untuk selalu menuju versi terbaru, gunakan tautan berikut:  
+[![GitHub Releases](https://img.shields.io/github/v/release/informasidata91-cpu/Maintenance-Windows?display_name=release&sort=semver&color=blue&logo=github)](https://github.com/informasidata91-cpu/Maintenance-Windows/releases/latest) .  
 
 --- 
 ## Disclaimer  
