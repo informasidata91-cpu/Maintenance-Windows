@@ -1,6 +1,5 @@
 @echo off
 setlocal EnableExtensions
-cd /d "%~dp0"
 
 cls
 echo =============================================
@@ -22,8 +21,6 @@ if %errorlevel% neq 0 (
   echo Jendela ini akan ditutup. Lanjutkan di jendela baru.
   exit /b
 )
-cd /d %SystemDrive%\
-echo [i] Working directory sekarang: %CD%
 
 :: 2) Mengunduh skrip PS1 (overwrite bila ada)
 echo [i] Mengunduh Maintenance.ps1 dari repository...
