@@ -1,3 +1,36 @@
+::[Bat To Exe Converter]
+::
+::YAwzoRdxOk+EWAjk
+::fBw5plQjdCyDJGyX8VAjFDpXSRa+GGStCLkT6ezo0+eGq0MJUew+dozelL2NL4A=
+::YAwzuBVtJxjWCl3EqQJgSA==
+::ZR4luwNxJguZRRnk
+::Yhs/ulQjdF+5
+::cxAkpRVqdFKZSDk=
+::cBs/ulQjdF+5
+::ZR41oxFsdFKZSDk=
+::eBoioBt6dFKZSDk=
+::cRo6pxp7LAbNWATEpCI=
+::egkzugNsPRvcWATEpCI=
+::dAsiuh18IRvcCxnZtBJQ
+::cRYluBh/LU+EWAnk
+::YxY4rhs+aU+IeA==
+::cxY6rQJ7JhzQF1fEqQJhZkgaHkrSXA==
+::ZQ05rAF9IBncCkqN+0xwdVsFAlfMbiXqZg==
+::ZQ05rAF9IAHYFVzEqQIdKRJaWAGMPWW5A/Ur4eb/4P2Uwg==
+::eg0/rx1wNQPfEVWB+kM9LVsJDCmDNWWuA7sd5uv+oe+fpy0=
+::fBEirQZwNQPfEVWB+kM9LVsJDCmDNWWuA7sd5uv+jw==
+::cRolqwZ3JBvQF1fEqQIHIRVQQxORfEa7D7sI7eb64emC4ngJXe42bJa7
+::dhA7uBVwLU+EWDk=
+::YQ03rBFzNR3SWATE0EMkKVt9QgKNLma7FbyeDCqb
+::dhAmsQZ3MwfNWATEVotweksGGUSmPX+7RpwS7ufp4uuUq8/5lqx/WYPXmqaHJ+gH+QX2cIUoxGxfnIVs
+::ZQ0/vhVqMQ3MEVWAtB9wSA==
+::Zg8zqx1/OA3MEVWAtB9wSA==
+::dhA7pRFwIByZRRmm4Us8PFtCRQXCDGStA6cv4O3346qGrEldd+0ydY7V3vS+Mu8e+lGqFQ==
+::Zh4grVQjdCuDJH6N4EolKid5TQ2MKG60B7sf7aXM5uSDrVoOaM8+cYHP37qPLuMWpED8cPY=
+::YB416Ek+ZW8=
+::
+::
+::978f952a14a936cc963da21a135fa983
 @echo off
 setlocal EnableExtensions
 
