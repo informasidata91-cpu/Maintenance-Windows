@@ -19,6 +19,26 @@ param(
   [switch]$NoRestart,
   [switch]$ForceAutoRestart
 )
+$os = Get-CimInstance Win32_OperatingSystem
+$ver = [Version]$os.Version
+if ($ver.Major -lt 10) { throw "Unsupported OS: $($os.Caption) $($os.Version)" }
+# Optional: validasi server 2019+ via build >= 17763
+
+$isDesktop = ($os.ProductType -eq 1)
+$os64 = [Environment]::Is64BitOperatingSystem
+$procBits = [IntPtr]::Size * 8
+
+function Test-Admin {
+  $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+  $p  = New-Object Security.Principal.WindowsPrincipal($id)
+  $p.IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)
+}
+if (-not (Test-Admin)) { throw "Run as Administrator is required." }
+
+$drive = (Get-PSDrive -Name ($env:SystemDrive.TrimEnd(':','\')))
+$freeGB = [math]::Round($drive.Free/1GB,2)
+if ($freeGB -lt 2) { Write-Warning "Low free space: $freeGB GB on $($drive.Name):" }
+
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
