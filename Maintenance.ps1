@@ -28,13 +28,6 @@ $isDesktop = ($os.ProductType -eq 1)
 $os64 = [Environment]::Is64BitOperatingSystem
 $procBits = [IntPtr]::Size * 8
 
-function Test-Admin {
-  $id = [Security.Principal.WindowsIdentity]::GetCurrent()
-  $p  = New-Object Security.Principal.WindowsPrincipal($id)
-  $p.IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)
-}
-if (-not (Test-Admin)) { throw "Run as Administrator is required." }
-
 $drive = (Get-PSDrive -Name ($env:SystemDrive.TrimEnd(':','\')))
 $freeGB = [math]::Round($drive.Free/1GB,2)
 if ($freeGB -lt 2) { Write-Warning "Low free space: $freeGB GB on $($drive.Name):" }
