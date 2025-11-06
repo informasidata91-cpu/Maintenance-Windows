@@ -422,8 +422,8 @@ try {
     @{ Name='Disk Cleanup'; Action={ if (-not $SkipCleanup) { Run-Cleanup } }; Skip=$SkipCleanup },
     @{ Name='Extra Cleanup'; Action={ if (-not $SkipExtraCleanup) { Extra-Cleanup } }; Skip=$SkipExtraCleanup },
     @{ Name='Optimize Drives'; Action={ if (-not $SkipDefrag) { Optimize-Drives } }; Skip=$SkipDefrag },
-    @{ Name='CHKDSK'; Action={ if (-not $SkipChkdsk) { Chkdsk-Online-And-Schedule } }; Skip=$SkipChkdsk },
-    @{ Name='Memory Diagnostic'; Action={ if (-not $SkipMemoryDiag) { Schedule-MemoryDiagnostic } }; Skip=$SkipMemoryDiag }
+    @{ Name='CHKDSK'; Action={ if (-not $SkipChkdsk) { Invoke-ChkdskOnlineAndSchedule } }; Skip=$SkipChkdsk },
+    @{ Name='Memory Diagnostic'; Action={ if (-not $SkipMemoryDiag) { Invoke-MemoryDiagnostic } }; Skip=$SkipMemoryDiag }
   )
 
   $TotalSteps = $tasks.Count
