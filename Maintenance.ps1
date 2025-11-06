@@ -68,9 +68,32 @@ function Ensure-Admin {
   }
 }
 
-function Write-Status($msg, $color='Gray') {
-  $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
-  Write-Host "[$ts] $msg" -ForegroundColor $color
+function Write-Status {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('Info','Warn','Error','Success','Green','Yellow','Red','Cyan','Gray','DarkYellow','DarkCyan')]
+        [string]$Level = 'Info'
+    )
+
+    # Pemetaan level ke warna
+    $fg = switch ($Level) {
+        'Info'    { 'Cyan' }
+        'Warn'    { 'Yellow' }
+        'Error'   { 'Red' }
+        'Success' { 'Green' }
+        'Green'   { 'Green' }
+        'Yellow'  { 'Yellow' }
+        'Red'     { 'Red' }
+        'Cyan'    { 'Cyan' }
+        'Gray'    { 'Gray' }
+        'DarkYellow' { 'DarkYellow' }
+        'DarkCyan'   { 'DarkCyan' }
+        default   { 'Gray' }
+    }
+
+    $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+    Write-Host "[$ts] $Message" -ForegroundColor $fg
 }
 
 function New-Log {
@@ -346,7 +369,7 @@ function Invoke-MemoryDiagnostic {
                           -ErrorAction Stop
 
             if ($Mode -eq 'Schedule') {
-                Write-Host "Tes RAM dijadwalkan pada boot berikutnya. Simpan pekerjaan Anda lalu lakukan restart kapan siap."
+                Write-Host "Tes RAM dijadwalkan pada boot berikutnya. Simpan pekerjaan Anda lalu lakukan restart ketika siap."
                 Write-Host "Setelah reboot dan tes selesai, buka Event Viewer > Windows Logs > System, filter Source: MemoryDiagnostics-Results untuk melihat hasil."
             }
             else {
@@ -403,20 +426,40 @@ try {
   $tasks = @(
     @{ Name='SFC'; Action={ if (-not $SkipSFC) { $script:SfcExit = Run-SFC } }; Skip=$SkipSFC },
     @{ Name='DISM 3-step (kondisional)'; Action={
-        if (-not $SkipDISM) {
-          $needDism = ($script:SfcExit -ne 0)
-          # Fallback: baca CBS.log bila SFC exit 0 tapi ada indikasi korup
-          try {
-            $cbsPath = "$env:WINDIR\Logs\CBS\CBS.log"
-            if (Test-Path $cbsPath) {
-              $cbs = Get-Content $cbsPath -ErrorAction SilentlyContinue -Tail 2000 -Raw
-              if ($cbs -match 'Windows Resource Protection found corrupt files') { $needDism = $true }
-              if ($cbs -match 'unable to fix') { $needDism = $true }
-            }
-          } catch {}
-          if ($needDism) { Run-DISM-3 } else { Write-Status 'SFC OK; DISM dilewati (tidak diperlukan)' }
+    if (-not $SkipDISM) {
+      $needDism = ($script:SfcExit -ne 0)
+
+      # Pastikan folder CBS ada
+      $cbsDir = Ensure-CbsFolder
+
+      # Kandidat log yang sering tersedia
+      $candidates = @(
+        (Join-Path $cbsDir 'CBS.log'),
+        (Join-Path $cbsDir 'CBS.persist.log')
+      ) | Where-Object { Test-Path -LiteralPath $_ }
+
+      if (-not $candidates -or $candidates.Count -eq 0) {
+        Write-Status 'CBS log tidak ditemukan; lewati parsing CBS dan andalkan exit SFC.' 'Yellow'
+      } else {
+        try {
+          # Gabungkan tail dari masing-masing file untuk indikasi korupsi
+          $content = ($candidates | ForEach-Object {
+              Write-Status "Analisis: $_" 'DarkCyan'
+              Get-Content -LiteralPath $_ -Tail 4000 -Raw -ErrorAction Stop
+          }) -join "`r`n"
+
+          if ($content -match 'Windows Resource Protection found corrupt files') { $needDism = $true }
+          if ($content -match 'unable to fix') { $needDism = $true }
+          if ($content -match 'successfully repaired') { $needDism = $true }
+        } catch {
+          Write-Status "Gagal membaca CBS log: $($_.Exception.Message)" 'Yellow'
         }
-      }; Skip=$SkipDISM },
+      }
+
+      if ($needDism) { Run-DISM-3 } else { Write-Status 'SFC OK; DISM dilewati (tidak diperlukan)' }
+    }
+  }; Skip=$SkipDISM },
+
     @{ Name='Reset Windows Update'; Action={ if (-not $SkipWUReset) { Reset-WindowsUpdate } }; Skip=$SkipWUReset },
     @{ Name='Network Fix'; Action={ if (-not $SkipNetworkFix) { Flush-DNS; Reset-Winsock } }; Skip=$SkipNetworkFix },
     @{ Name='Disk Cleanup'; Action={ if (-not $SkipCleanup) { Run-Cleanup } }; Skip=$SkipCleanup },
