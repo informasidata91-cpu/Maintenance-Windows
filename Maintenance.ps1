@@ -402,9 +402,9 @@ try {
           } else {
             try {
               $content = ($candidates | ForEach-Object {
-                  Write-Status "Analisis: $_" 'DarkCyan'
-                  Get-Content -LiteralPath $_ -Tail 4000 -Raw -ErrorAction Stop
-              }) -join "`r`n"
+				Write-Status "Analisis: $_" 'DarkCyan'
+					(Get-Content -LiteralPath $_ -Tail 4000 -ErrorAction Stop) -join "`r`n"
+				}) -join "`r`n"
 
               if ($content -match 'Windows Resource Protection found corrupt files') { $needDism = $true }
               if ($content -match 'unable to fix') { $needDism = $true }
