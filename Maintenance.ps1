@@ -240,23 +240,133 @@ function Optimize-Drives {
 }
 
 # ---- CHKDSK ----
-function Chkdsk-Online-And-Schedule {
-  Write-Status 'CHKDSK online /scan...'
-  $drv = $env:SystemDrive.TrimEnd(':')
-  $proc = Start-Process -FilePath 'cmd.exe' -ArgumentList "/c chkdsk $drv`: /scan" -Wait -PassThru
-  $needRepair = $LASTEXITCODE -ne 0
-  if ($needRepair) {
-    Write-Status 'Menjadwalkan CHKDSK /F /R pada reboot...'
-    Start-Process -FilePath 'cmd.exe' -ArgumentList "/c echo Y | chkdsk $drv`: /F /R" -Verb RunAs -Wait
-  } else {
-    Write-Status 'Tidak perlu penjadwalan CHKDSK.' 'Green'
-  }
+function Invoke-ChkdskOnlineAndSchedule {
+    [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
+    param(
+        # Drive yang akan diperiksa, default ke system drive (mis. 'C:')
+        [string]$Drive = $env:SystemDrive,
+
+        # Jadwalkan /spotfix (lebih cepat pada reboot) alih-alih /F /R
+        [switch]$UseSpotFix,
+
+        # Sembunyikan jendela CMD saat pemanggilan
+        [switch]$Hidden
+    )
+
+    # Normalisasi drive letter (C, bukan C:\, dan bukan C:)
+    $drv = ($Drive.TrimEnd('\')).TrimEnd(':')
+    if ([string]::IsNullOrWhiteSpace($drv)) {
+        throw "Drive tidak valid: '$Drive'"
+    }
+
+    Write-Status "CHKDSK online /scan pada $drv`: ..." 'Info'
+
+    # Susun perintah: jalankan chkdsk online scan, lalu exit dengan ERRORLEVEL yang sama
+    $scanCmd = "chkdsk $drv`: /scan & exit %ERRORLEVEL%"
+    $winStyle = if ($Hidden) { 'Hidden' } else { 'Normal' }
+
+    # Jalankan scan; gunakan cmd.exe agar $LASTEXITCODE mencerminkan ERRORLEVEL proses chkdsk
+    $proc = Start-Process -FilePath 'cmd.exe' `
+                          -ArgumentList "/c $scanCmd" `
+                          -WindowStyle $winStyle `
+                          -Wait -PassThru
+    $code = $LASTEXITCODE
+
+    # Interpretasi hasil (berdasarkan dokumentasi CHKDSK)
+    # 0: No errors found; 1: Errors found and fixed (jika /f dipakai); 
+    # 2: Cleanup dilakukan/ditunda (tanpa /f); 3: Tidak dapat memeriksa/memerlukan /f
+    switch ($code) {
+        0 { Write-Status "Tidak ada error terdeteksi oleh /scan pada $drv`:." 'Green' }
+        1 { Write-Status "Ada error dan telah diperbaiki secara online (bila memungkinkan) pada $drv`:." 'Yellow' }
+        2 { Write-Status "Perlu perbaikan offline (tanpa /f). Pertimbangkan penjadwalan pada reboot." 'Yellow' }
+        3 { Write-Status "Volume memerlukan pemeriksaan/perbaikan offline atau pemeriksaan gagal." 'Yellow' }
+        default { Write-Status "Kode keluar CHKDSK tak dikenal: $code" 'Yellow' }
+    }
+
+    # Keputusan penjadwalan: jadwalkan jika kode 2 atau 3
+    $needSchedule = ($code -in 2,3)
+
+    if ($needSchedule) {
+        $modeLabel = if ($UseSpotFix) { '/spotfix' } else { '/F /R' }
+        if ($PSCmdlet.ShouldProcess("$drv`:", "Schedule CHKDSK $modeLabel at next reboot")) {
+            Write-Status "Menjadwalkan CHKDSK $modeLabel pada reboot..." 'Yellow'
+
+            # Siapkan perintah penjadwalan (jawab 'Y' untuk lock system volume)
+            $fixArgs = if ($UseSpotFix) { "/spotfix" } else { "/F /R" }
+            $schedCmd = "echo Y | chkdsk $drv`: $fixArgs & exit %ERRORLEVEL%"
+
+            # WAJIB elevated saat penjadwalan
+            Start-Process -FilePath 'cmd.exe' `
+                          -ArgumentList "/c $schedCmd" `
+                          -Verb RunAs `
+                          -WindowStyle $winStyle `
+                          -Wait
+
+            # Opsional: baca kembali ERRORLEVEL jika ingin verifikasi
+            $scheduleExit = $LASTEXITCODE
+            if ($scheduleExit -eq 0) {
+                Write-Status "CHKDSK $modeLabel telah dijadwalkan. Simpan pekerjaan Anda dan lakukan restart untuk memulai pemeriksaan." 'Yellow'
+            } else {
+                Write-Status "Penjadwalan CHKDSK mungkin gagal (exit code: $scheduleExit). Coba jalankan sebagai Administrator." 'Error'
+            }
+        }
+    }
+    else {
+        Write-Status 'Tidak perlu penjadwalan CHKDSK.' 'Green'
+    }
 }
 
 # ---- Memory diagnostic ----
-function Schedule-MemoryDiagnostic {
-  Write-Status 'Jadwalkan Windows Memory Diagnostic...'
-  Start-Process "$env:WINDIR\System32\mdsched.exe" '/s' -Verb RunAs
+function Invoke-MemoryDiagnostic {
+    [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
+    param(
+        # Mode eksekusi: 'Schedule' = jadwalkan pada boot berikutnya, 'RunNow' = jalankan segera (butuh restart)
+        [ValidateSet('Schedule','RunNow')]
+        [string]$Mode = 'Schedule',
+
+        # Sembunyikan jendela mdsched (opsional)
+        [switch]$Hidden
+    )
+
+    Write-Status 'Jalankan Windows Memory Diagnostic...'  # gunakan fungsi Write-Status Anda sendiri [placeholder]
+
+    # Tentukan path eksekutabel
+    $Exe = Join-Path $env:WINDIR 'System32\mdsched.exe'
+    if (-not (Test-Path -LiteralPath $Exe)) {
+        Write-Error "Tidak menemukan $Exe. Pastikan komponen Windows Memory Diagnostic tersedia."
+        return
+    }
+
+    # Tentukan argumen: /s = schedule next boot, /r = run now (restart untuk masuk mode tes)
+    $Arg = if ($Mode -eq 'RunNow') { '/r' } else { '/s' }
+
+    # Opsi tampilan jendela
+    $winStyle = if ($Hidden) { 'Hidden' } else { 'Normal' }
+
+    try {
+        # Konfirmasi ShouldProcess
+        $target = "Windows Memory Diagnostic ($Mode)"
+        if ($PSCmdlet.ShouldProcess($target, "Start-Process $($Exe) $Arg as Administrator"))) {
+            # Start-Process dengan parameter eksplisit
+            Start-Process -FilePath $Exe `
+                          -ArgumentList $Arg `
+                          -Verb RunAs `
+                          -WindowStyle $winStyle `
+                          -ErrorAction Stop
+
+            if ($Mode -eq 'Schedule') {
+                Write-Output "Tes RAM dijadwalkan pada boot berikutnya. Simpan pekerjaan Anda lalu lakukan restart kapan siap." [web:43]
+                Write-Output "Setelah reboot dan tes selesai, buka Event Viewer > Windows Logs > System, filter Source: MemoryDiagnostics-Results untuk melihat hasil." [web:53]
+            }
+            else {
+                Write-Output "Tes RAM akan dijalankan segera. Sistem akan restart untuk masuk ke mode pengujian. Simpan pekerjaan Anda sekarang." [web:43]
+                Write-Output "Sesudah tes dan boot kembali ke Windows, cek Event Viewer > Windows Logs > System, Source: MemoryDiagnostics-Results." [web:69]
+            }
+        }
+    }
+    catch {
+        Write-Error "Gagal memulai Windows Memory Diagnostic: $($_.Exception.Message)"
+    }
 }
 
 # ---- Auto Restart (diperkuat) ----
