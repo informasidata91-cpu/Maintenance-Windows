@@ -320,34 +320,25 @@ function Invoke-ChkdskOnlineAndSchedule {
 function Invoke-MemoryDiagnostic {
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
     param(
-        # Mode eksekusi: 'Schedule' = jadwalkan pada boot berikutnya, 'RunNow' = jalankan segera (butuh restart)
         [ValidateSet('Schedule','RunNow')]
         [string]$Mode = 'Schedule',
-
-        # Sembunyikan jendela mdsched (opsional)
         [switch]$Hidden
     )
 
-    Write-Status 'Jalankan Windows Memory Diagnostic...'  # gunakan fungsi Write-Status Anda sendiri [placeholder]
+    Write-Status 'Jalankan Windows Memory Diagnostic...'
 
-    # Tentukan path eksekutabel
     $Exe = Join-Path $env:WINDIR 'System32\mdsched.exe'
     if (-not (Test-Path -LiteralPath $Exe)) {
         Write-Error "Tidak menemukan $Exe. Pastikan komponen Windows Memory Diagnostic tersedia."
         return
     }
 
-    # Tentukan argumen: /s = schedule next boot, /r = run now (restart untuk masuk mode tes)
     $Arg = if ($Mode -eq 'RunNow') { '/r' } else { '/s' }
-
-    # Opsi tampilan jendela
     $winStyle = if ($Hidden) { 'Hidden' } else { 'Normal' }
 
     try {
-        # Konfirmasi ShouldProcess
         $target = "Windows Memory Diagnostic ($Mode)"
-        if ($PSCmdlet.ShouldProcess($target, "Start-Process $($Exe) $Arg as Administrator"))) {
-            # Start-Process dengan parameter eksplisit
+        if ($PSCmdlet.ShouldProcess($target, "Start-Process $($Exe) $Arg as Administrator")) {
             Start-Process -FilePath $Exe `
                           -ArgumentList $Arg `
                           -Verb RunAs `
@@ -355,12 +346,12 @@ function Invoke-MemoryDiagnostic {
                           -ErrorAction Stop
 
             if ($Mode -eq 'Schedule') {
-                Write-Output "Tes RAM dijadwalkan pada boot berikutnya. Simpan pekerjaan Anda lalu lakukan restart kapan siap." [web:43]
-                Write-Output "Setelah reboot dan tes selesai, buka Event Viewer > Windows Logs > System, filter Source: MemoryDiagnostics-Results untuk melihat hasil." [web:53]
+                Write-Host "Tes RAM dijadwalkan pada boot berikutnya. Simpan pekerjaan Anda lalu lakukan restart kapan siap."
+                Write-Host "Setelah reboot dan tes selesai, buka Event Viewer > Windows Logs > System, filter Source: MemoryDiagnostics-Results untuk melihat hasil."
             }
             else {
-                Write-Output "Tes RAM akan dijalankan segera. Sistem akan restart untuk masuk ke mode pengujian. Simpan pekerjaan Anda sekarang." [web:43]
-                Write-Output "Sesudah tes dan boot kembali ke Windows, cek Event Viewer > Windows Logs > System, Source: MemoryDiagnostics-Results." [web:69]
+                Write-Host "Tes RAM akan dijalankan segera. Sistem akan restart untuk masuk ke mode pengujian. Simpan pekerjaan Anda sekarang."
+                Write-Host "Sesudah tes dan boot kembali ke Windows, cek Event Viewer > Windows Logs > System, Source: MemoryDiagnostics-Results."
             }
         }
     }
