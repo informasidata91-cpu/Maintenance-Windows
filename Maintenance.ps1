@@ -269,19 +269,24 @@ function Invoke-ChkdskOnlineAndSchedule {
         [switch]$UseSpotFix,
         [switch]$Hidden
     )
+
+    # Normalisasi drive
     $drv = ($Drive.TrimEnd('\')).TrimEnd(':')
     if ([string]::IsNullOrWhiteSpace($drv)) { throw "Drive tidak valid: '$Drive'" }
 
     Write-Status "CHKDSK online /scan pada $drv`: ..." 'Info'
-    $scanCmd = "chkdsk $drv`: /scan & exit %ERRORLEVEL%"
     $winStyle = if ($Hidden) { 'Hidden' } else { 'Normal' }
 
-    $null = Start-Process -FilePath 'cmd.exe' -ArgumentList "/c $scanCmd" -WindowStyle $winStyle -Wait -PassThru
-    $code = $LASTEXITCODE
+    # Jalankan scan dan ambil ExitCode dari objek proses (deterministik)
+    $proc = Start-Process -FilePath 'cmd.exe' `
+             -ArgumentList "/c chkdsk $drv`: /scan & exit %ERRORLEVEL%" `
+             -WindowStyle $winStyle `
+             -Wait -PassThru
+    $code = $proc.ExitCode
 
     switch ($code) {
         0 { Write-Status "Tidak ada error terdeteksi oleh /scan pada $drv`:." 'Green' }
-        1 { Write-Status "Ada error dan telah diperbaiki secara online (bila memungkinkan) pada $drv`:." 'Warn' }
+        1 { Write-Status "Ada error dan telah diperbaiki secara online (jika memungkinkan) pada $drv`:." 'Warn' }
         2 { Write-Status "Perlu perbaikan offline (tanpa /f). Pertimbangkan penjadwalan." 'Warn' }
         3 { Write-Status "Volume memerlukan pemeriksaan/perbaikan offline atau pemeriksaan gagal." 'Warn' }
         default { Write-Status "Kode keluar CHKDSK tak dikenal: $code" 'Warn' }
@@ -293,9 +298,15 @@ function Invoke-ChkdskOnlineAndSchedule {
         if ($PSCmdlet.ShouldProcess("$drv`:", "Schedule CHKDSK $modeLabel at next reboot")) {
             Write-Status "Menjadwalkan CHKDSK $modeLabel pada reboot..." 'Warn'
             $fixArgs = if ($UseSpotFix) { "/spotfix" } else { "/F /R" }
-            $schedCmd = "echo Y | chkdsk $drv`: $fixArgs & exit %ERRORLEVEL%"
-            $null = Start-Process -FilePath 'cmd.exe' -ArgumentList "/c $schedCmd" -Verb RunAs -WindowStyle $winStyle -Wait
-            $scheduleExit = $LASTEXITCODE
+
+            # Jalankan penjadwalan dengan elevasi dan ambil ExitCode deterministik
+            $proc2 = Start-Process -FilePath 'cmd.exe' `
+                      -ArgumentList "/c echo Y | chkdsk $drv`: $fixArgs & exit %ERRORLEVEL%" `
+                      -Verb RunAs `
+                      -WindowStyle $winStyle `
+                      -Wait -PassThru
+            $scheduleExit = $proc2.ExitCode
+
             if ($scheduleExit -eq 0) {
                 Write-Status "CHKDSK $modeLabel telah dijadwalkan. Simpan pekerjaan Anda dan lakukan restart untuk memulai pemeriksaan." 'Warn'
             } else {
