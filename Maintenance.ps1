@@ -393,19 +393,68 @@ try {
     Start-Sleep 2
   }
 
+function Ensure-Folder {
+    param([Parameter(Mandatory)][string]$Path)
+    if (-not (Test-Path -LiteralPath $Path)) {
+        try { New-Item -ItemType Directory -Force -Path $Path | Out-Null } catch {}
+    }
+    return $Path
+}
+
+function Get-FileTail {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [int]$TailLines = 0,
+        [int]$TailChars = 0
+    )
+    if (-not (Test-Path -LiteralPath $Path)) { return '' }
+    if ($TailLines -gt 0) {
+        return ((Get-Content -LiteralPath $Path -Tail $TailLines -ErrorAction Stop) -join "`r`n")
+    } elseif ($TailChars -gt 0) {
+        $text = Get-Content -LiteralPath $Path -Raw -ErrorAction Stop
+        if ($text.Length -gt $TailChars) { return $text.Substring($text.Length - $TailChars) }
+        return $text
+    } else {
+        return (Get-Content -LiteralPath $Path -Raw -ErrorAction Stop)
+    }
+}
+
+function Test-SFCIndicatesCorruption {
+  param([int]$TailLines = 4000)
+  $cbsDir = Join-Path $env:WINDIR 'Logs\CBS'
+  Ensure-Folder $cbsDir | Out-Null
+  $candidates = @(
+    Join-Path $cbsDir 'CBS.log'
+    Join-Path $cbsDir 'CBS.persist.log'
+  ) | Where-Object { Test-Path -LiteralPath $_ }
+  if (-not $candidates) { return $false }
+  foreach ($p in $candidates) {
+    try {
+      $tail = Get-FileTail -Path $p -TailLines $TailLines
+      if ([string]::IsNullOrEmpty($tail)) { continue }
+      if ($tail -match 'Windows Resource Protection found corrupt files') { return $true }
+      if ($tail -match 'unable to fix') { return $true }
+      if ($tail -match 'successfully repaired') { return $true }
+      if ($tail -match '\[SR\].*(cannot|repair|corrupt|hash)') { return $true }
+    } catch { continue }
+  }
+  return $false
+}
+
   $tasks = @(
     @{ Name='SFC'; Action={ if (-not $SkipSFC) { $script:SfcExit = Run-SFC } }; Skip=$SkipSFC },
     @{ Name='DISM 3-step (kondisional)'; Action={
         if (-not $SkipDISM) {
-          $needDism = ($script:SfcExit -ne 0)
+			$needDism = ($script:SfcExit -ne 0)
 			try {
-			if (-not $needDism) {
-				if (Test-SFCIndicatesCorruption -TailLines 4000) { $needDism = $true }
-					}
-				} catch {
-					Write-Status ("Gagal evaluasi CBS.log: " + $_.Exception.Message) 'Warn'
+				if (-not $needDism) {
+					if (Test-SFCIndicatesCorruption -TailLines 4000) { $needDism = $true }
 				}
-				if ($needDism) { Run-DISM-3 } else { Write-Status 'SFC OK; DISM dilewati (tidak diperlukan)' 'Green' }
+			} catch {
+				Write-Status ("Gagal evaluasi CBS.log: " + $_.Exception.Message) 'Warn'
+			}
+			if ($needDism) { Run-DISM-3 } else { Write-Status 'SFC OK; DISM dilewati (tidak diperlukan)' 'Green' }
 				}
 			  }; Skip=$SkipDISM },
     @{ Name='Reset Windows Update'; Action={ if (-not $SkipWUReset) { Reset-WindowsUpdate } }; Skip=$SkipWUReset },
