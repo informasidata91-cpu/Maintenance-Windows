@@ -428,7 +428,15 @@ try {
       $needDism = ($script:SfcExit -ne 0)
 
       # Pastikan folder CBS ada
-      $cbsDir = Ensure-CbsFolder
+      $cbsDir = Join-Path $env:WINDIR 'Logs\CBS'
+		if (-not (Test-Path -LiteralPath $cbsDir)) {
+			try {
+				New-Item -ItemType Directory -Path $cbsDir -Force | Out-Null
+				Write-Status "Membuat folder: $cbsDir" 'DarkCyan'
+			} catch {
+				Write-Status "Gagal membuat folder CBS: $($_.Exception.Message)" 'Yellow'
+			}	
+		}
 
       # Kandidat log yang sering tersedia
       $candidates = @(
