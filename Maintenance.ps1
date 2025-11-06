@@ -398,42 +398,16 @@ try {
     @{ Name='DISM 3-step (kondisional)'; Action={
         if (-not $SkipDISM) {
           $needDism = ($script:SfcExit -ne 0)
-
-          $cbsDir = Ensure-CbsFolder
-          $candidates = @(
-            Join-Path $cbsDir 'CBS.log'
-            Join-Path $cbsDir 'CBS.persist.log'
-          ) | Where-Object { Test-Path -LiteralPath $_ }
-
-          if ($null -eq $candidates) { $candidates = @() }
-          elseif ($candidates -isnot [array]) { $candidates = @($candidates) }
-
-          if ($candidates.Count -eq 0) {
-            Write-Status 'CBS log tidak ditemukan; andalkan exit code SFC.' 'Warn'
-          } else {
-            try {
-              $content = ($candidates | ForEach-Object {
-				Write-Status "Analisis: $_" 'DarkCyan'
-					(Get-Content -LiteralPath $_ -Tail 4000 -ErrorAction Stop) -join "`r`n"
-				}) -join "`r`n"
-
-              if ($content -match 'Windows Resource Protection found corrupt files') { $needDism = $true }
-              if ($content -match 'unable to fix') { $needDism = $true }
-              if ($content -match 'successfully repaired') { $needDism = $true }
-            } catch {
-              Write-Status "Gagal membaca CBS log: $($_.Exception.Message)" 'Warn'
-            }
-          }
-
-          # Opsional: info letak dism.log
-          try {
-            $dismLog = Join-Path $env:WINDIR 'Logs\DISM\dism.log'
-            if (Test-Path -LiteralPath $dismLog) { Write-Status "DISM log: $dismLog" 'DarkCyan' }
-          } catch {}
-
-          if ($needDism) { Run-DISM-3 } else { Write-Status 'SFC OK; DISM dilewati (tidak diperlukan)' 'Green' }
-        }
-      }; Skip=$SkipDISM },
+			try {
+			if (-not $needDism) {
+				if (Test-SFCIndicatesCorruption -TailLines 4000) { $needDism = $true }
+					}
+				} catch {
+					Write-Status ("Gagal evaluasi CBS.log: " + $_.Exception.Message) 'Warn'
+				}
+				if ($needDism) { Run-DISM-3 } else { Write-Status 'SFC OK; DISM dilewati (tidak diperlukan)' 'Green' }
+				}
+			  }; Skip=$SkipDISM },
     @{ Name='Reset Windows Update'; Action={ if (-not $SkipWUReset) { Reset-WindowsUpdate } }; Skip=$SkipWUReset },
     @{ Name='Network Fix'; Action={ if (-not $SkipNetworkFix) { Flush-DNS; Reset-Winsock } }; Skip=$SkipNetworkFix },
     @{ Name='Disk Cleanup'; Action={ if (-not $SkipCleanup) { Run-Cleanup } }; Skip=$SkipCleanup },
