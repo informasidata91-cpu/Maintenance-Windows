@@ -428,14 +428,32 @@ try {
       $needDism = ($script:SfcExit -ne 0)
 
       # Pastikan folder CBS ada
-      $cbsDir = Join-Path $env:WINDIR 'Logs\CBS'
-		if (-not (Test-Path -LiteralPath $cbsDir)) {
+      $cbsDir = Ensure-CbsFolder
+
+		# Kumpulkan kandidat dan paksa menjadi array
+		$candidates = @(
+			Join-Path $cbsDir 'CBS.log'
+			Join-Path $cbsDir 'CBS.persist.log'
+		) | Where-Object { Test-Path -LiteralPath $_ }
+
+		# Normalisasi ke array meskipun $null atau tunggal
+		if ($null -eq $candidates) { $candidates = @() }
+		elseif ($candidates -isnot [array]) { $candidates = @($candidates) }
+
+		if ($candidates.Count -eq 0) {
+			Write-Status 'CBS log tidak ditemukan; lewati parsing CBS dan andalkan exit SFC.' 'Yellow'
+		} else {
 			try {
-				New-Item -ItemType Directory -Path $cbsDir -Force | Out-Null
-				Write-Status "Membuat folder: $cbsDir" 'DarkCyan'
+				$content = ($candidates | ForEach-Object {
+					Write-Status "Analisis: $_" 'DarkCyan'
+					Get-Content -LiteralPath $_ -Tail 4000 -Raw -ErrorAction Stop
+				}) -join "`r`n"
+				if ($content -match 'Windows Resource Protection found corrupt files') { $needDism = $true }
+				if ($content -match 'unable to fix') { $needDism = $true }
+				if ($content -match 'successfully repaired') { $needDism = $true }
 			} catch {
-				Write-Status "Gagal membuat folder CBS: $($_.Exception.Message)" 'Yellow'
-			}	
+				Write-Status "Gagal membaca CBS log: $($_.Exception.Message)" 'Yellow'
+			}
 		}
 
       # Kandidat log yang sering tersedia
