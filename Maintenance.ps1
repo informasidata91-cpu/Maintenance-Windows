@@ -1,7 +1,5 @@
 <#
-Version: 2.2.0.1
-Fokus: PS 5.1, logging kuat, SFC -> DISM -> CHKDSK online, reset Windows Update, optimasi HDD/SSD.
-Perbaikan: SFC parsing output untuk memicu DISM saat ada korup (meski exit code 0); fallback cek CBS.log.
+Version: 3.1.0.0
 #>
 
 [CmdletBinding()]
@@ -658,3 +656,4 @@ finally {
 # ZRjIkd9rxz1s8MhnMAXtWxW46kFzGHoXtRiUecAc21OFpYEmLwDtaf+KP7nY+2JC
 # O4VuN/cMnJQ9UlFphAIUSb3JJy/VfnS2
 # SIG # End signature block
+
