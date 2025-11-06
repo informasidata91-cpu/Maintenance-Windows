@@ -2,6 +2,7 @@
 Version: 1.3.2.0
 #>
 
+# ============ Header & Setup ============
 [CmdletBinding()]
 param(
   [switch]$Silent,
@@ -17,26 +18,18 @@ param(
   [switch]$NoRestart,
   [switch]$ForceAutoRestart
 )
-$os = Get-CimInstance Win32_OperatingSystem
-$ver = [Version]$os.Version
-if ($ver.Major -lt 10) { throw "Unsupported OS: $($os.Caption) $($os.Version)" }
-# Optional: validasi server 2019+ via build >= 17763
-
-$isDesktop = ($os.ProductType -eq 1)
-$os64 = [Environment]::Is64BitOperatingSystem
-$procBits = [IntPtr]::Size * 8
-
-$drive = (Get-PSDrive -Name ($env:SystemDrive.TrimEnd(':','\')))
-$freeGB = [math]::Round($drive.Free/1GB,2)
-if ($freeGB -lt 2) { Write-Warning "Low free space: $freeGB GB on $($drive.Name):" }
-
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $global:LogFile = 'C:\MaintenanceLog.txt'
 $script:StartTime = Get-Date
 
-# TLS
+# OS guard (opsional bisa Anda pertahankan seperti semula)
+$os = Get-CimInstance Win32_OperatingSystem
+$ver = [Version]$os.Version
+if ($ver.Major -lt 10) { throw "Unsupported OS: $($os.Caption) $($os.Version)" }
+
+# TLS normalize
 $OriginalProtocol = [Net.ServicePointManager]::SecurityProtocol
 try {
   if ($PSVersionTable.PSVersion.Major -ge 7) {
@@ -66,6 +59,7 @@ function Ensure-Admin {
   }
 }
 
+# ============ Logging & Status ============
 function Write-Status {
     [CmdletBinding()]
     param(
@@ -73,23 +67,20 @@ function Write-Status {
         [ValidateSet('Info','Warn','Error','Success','Green','Yellow','Red','Cyan','Gray','DarkYellow','DarkCyan')]
         [string]$Level = 'Info'
     )
-
-    # Pemetaan level ke warna
     $fg = switch ($Level) {
-        'Info'    { 'Cyan' }
-        'Warn'    { 'Yellow' }
-        'Error'   { 'Red' }
-        'Success' { 'Green' }
-        'Green'   { 'Green' }
-        'Yellow'  { 'Yellow' }
-        'Red'     { 'Red' }
-        'Cyan'    { 'Cyan' }
-        'Gray'    { 'Gray' }
+        'Info'       { 'Cyan' }
+        'Warn'       { 'Yellow' }
+        'Error'      { 'Red' }
+        'Success'    { 'Green' }
+        'Green'      { 'Green' }
+        'Yellow'     { 'Yellow' }
+        'Red'        { 'Red' }
+        'Cyan'       { 'Cyan' }
+        'Gray'       { 'Gray' }
         'DarkYellow' { 'DarkYellow' }
         'DarkCyan'   { 'DarkCyan' }
-        default   { 'Gray' }
+        default      { 'Gray' }
     }
-
     $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
     Write-Host "[$ts] $Message" -ForegroundColor $fg
 }
@@ -110,7 +101,12 @@ function Stop-Log {
   Write-Host ('Log: ' + $LogFile + ' (Durasi: ' + [Math]::Round($d.TotalMinutes,2) + ' menit)') -ForegroundColor Cyan
 }
 
-# Jalankan proses eksternal lewat cmd agar output tampil
+function Section($i,$t,$name){
+  Write-Host ("`n[{0}/{1}] {2}" -f $i,$t,$name) -ForegroundColor Yellow
+  Write-Host ('=' * (12 + $name.Length)) -ForegroundColor DarkGray
+}
+
+# ============ External invocation ============
 function Invoke-External {
   [CmdletBinding()]
   param(
@@ -139,15 +135,9 @@ function Invoke-External {
   }
 }
 
-function Section($i,$t,$name){
-  Write-Host ("`n[{0}/{1}] {2}" -f $i,$t,$name) -ForegroundColor Yellow
-  Write-Host ('=' * (12 + $name.Length)) -ForegroundColor DarkGray
-}
-
-# ---- Integrity (SFC/DISM) ----
+# ============ Integrity (SFC/DISM) ============
 function Run-SFC {
-  Write-Status 'SFC /Scannow...'
-  # Tangkap output untuk deteksi korup meski exit code 0
+  Write-Status 'SFC /Scannow...' 'Info'
   $psi = New-Object System.Diagnostics.ProcessStartInfo
   $psi.FileName  = 'cmd.exe'
   $psi.Arguments = '/c sfc.exe /scannow'
@@ -170,23 +160,34 @@ function Run-SFC {
   $foundCorrupt = $false
   if ($stdout -match 'Windows Resource Protection found corrupt files') { $foundCorrupt = $true }
   if ($stdout -match 'unable to fix' -or $stdout -match 'successfully repaired') { $foundCorrupt = $true }
-
-  # Kembalikan 1 jika ada indikasi korup (agar memicu DISM), selain itu pakai exit code asli
   if ($foundCorrupt) { return 1 } else { return $p.ExitCode }
 }
 
 function Run-DISM-3 {
-  Write-Status 'DISM CheckHealth...'
+  Write-Status 'DISM CheckHealth...' 'Info'
   Invoke-External dism.exe '/Online /Cleanup-Image /CheckHealth'
-  Write-Status 'DISM ScanHealth...'
+  Write-Status 'DISM ScanHealth...' 'Info'
   Invoke-External dism.exe '/Online /Cleanup-Image /ScanHealth'
-  Write-Status 'DISM RestoreHealth...'
+  Write-Status 'DISM RestoreHealth...' 'Info'
   Invoke-External dism.exe '/Online /Cleanup-Image /RestoreHealth'
 }
 
-# ---- Windows Update reset ----
+function Ensure-CbsFolder {
+    $cbsDir = Join-Path $env:WINDIR 'Logs\CBS'
+    if (-not (Test-Path -LiteralPath $cbsDir)) {
+        try {
+            New-Item -ItemType Directory -Path $cbsDir -Force | Out-Null
+            Write-Status "Membuat folder: $cbsDir" 'DarkCyan'
+        } catch {
+            Write-Status "Gagal membuat folder CBS: $($_.Exception.Message)" 'Warn'
+        }
+    }
+    return $cbsDir
+}
+
+# ============ Windows Update reset ============
 function Reset-WindowsUpdate {
-  Write-Status 'Reset Windows Update components...'
+  Write-Status 'Reset Windows Update components...' 'Info'
   $svcs = 'bits','wuauserv','cryptsvc','msiserver'
   foreach ($s in $svcs) { Stop-Service $s -Force -ErrorAction SilentlyContinue }
   Start-Sleep 2
@@ -198,9 +199,9 @@ function Reset-WindowsUpdate {
   foreach ($s in $svcs) { Start-Service $s -ErrorAction SilentlyContinue }
 }
 
-# ---- Cleanup ----
+# ============ Cleanup ============
 function Run-Cleanup {
-  Write-Status 'Cleanup temp dan komponen...'
+  Write-Status 'Cleanup temp dan komponen...' 'Info'
   $paths = @($env:TEMP, $env:TMP, "$env:WINDIR\Temp") | Where-Object { $_ -and (Test-Path $_) }
   foreach ($p in $paths) {
     try { Get-ChildItem -Path $p -Recurse -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue } catch {}
@@ -210,7 +211,7 @@ function Run-Cleanup {
 }
 
 function Extra-Cleanup {
-  Write-Status 'Extra cleanup...'
+  Write-Status 'Extra cleanup...' 'Info'
   $targets = @(
     "$env:WINDIR\SoftwareDistribution\Download",
     "$env:WINDIR\SoftwareDistribution\DeliveryOptimization",
@@ -220,11 +221,11 @@ function Extra-Cleanup {
   )
   foreach ($t in $targets) { if (Test-Path $t) { Remove-Item $t -Recurse -Force -ErrorAction SilentlyContinue } }
   if (Test-Path 'C:\Windows.old') {
-    Write-Status 'Hapus Windows.old (rollback tidak lagi tersedia)...'
+    Write-Status 'Hapus Windows.old (rollback tidak lagi tersedia)...' 'Warn'
     try {
       Remove-Item 'C:\Windows.old' -Recurse -Force -ErrorAction Stop
     } catch {
-      Write-Status 'Fallback takeown/icacls Windows.old...'
+      Write-Status 'Fallback takeown/icacls Windows.old...' 'Warn'
       Invoke-External takeown.exe '/F C:\Windows.old /R /A /D Y'
       Invoke-External icacls.exe 'C:\Windows.old /grant administrators:F /T'
       Invoke-External cmd.exe '/c rmdir /s /q C:\Windows.old'
@@ -232,13 +233,13 @@ function Extra-Cleanup {
   }
 }
 
-# ---- Network fixes ----
-function Flush-DNS { Write-Status 'Flush DNS cache...'; try { Clear-DnsClientCache -ErrorAction SilentlyContinue } catch {} }
-function Reset-Winsock { Write-Status 'Winsock reset...'; Invoke-External netsh.exe 'winsock reset' }
+# ============ Network fixes ============
+function Flush-DNS { Write-Status 'Flush DNS cache...' 'Info'; try { Clear-DnsClientCache -ErrorAction SilentlyContinue } catch {} }
+function Reset-Winsock { Write-Status 'Winsock reset...' 'Info'; Invoke-External netsh.exe 'winsock reset' }
 
-# ---- Storage optimization ----
+# ============ Storage optimization ============
 function Optimize-Drives {
-  Write-Status 'Analyze + Defrag/ReTrim...'
+  Write-Status 'Analyze + Defrag/ReTrim...' 'Info'
   $vols = Get-Volume | Where-Object { $_.DriveType -eq 'Fixed' -and $_.DriveLetter }
   foreach ($v in $vols) {
     try {
@@ -255,89 +256,58 @@ function Optimize-Drives {
         Optimize-Volume -DriveLetter $dl -Defrag -ErrorAction SilentlyContinue 4> $null
       }
     } catch {
-      Write-Status ('Optimize gagal ' + $v.DriveLetter + ': ' + $_.Exception.Message) 'DarkYellow'
+      Write-Status ('Optimize gagal ' + $v.DriveLetter + ': ' + $_.Exception.Message) 'Warn'
     }
   }
 }
 
-# ---- CHKDSK ----
+# ============ CHKDSK ============
 function Invoke-ChkdskOnlineAndSchedule {
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
     param(
-        # Drive yang akan diperiksa, default ke system drive (mis. 'C:')
         [string]$Drive = $env:SystemDrive,
-
-        # Jadwalkan /spotfix (lebih cepat pada reboot) alih-alih /F /R
         [switch]$UseSpotFix,
-
-        # Sembunyikan jendela CMD saat pemanggilan
         [switch]$Hidden
     )
-
-    # Normalisasi drive letter (C, bukan C:\, dan bukan C:)
     $drv = ($Drive.TrimEnd('\')).TrimEnd(':')
-    if ([string]::IsNullOrWhiteSpace($drv)) {
-        throw "Drive tidak valid: '$Drive'"
-    }
+    if ([string]::IsNullOrWhiteSpace($drv)) { throw "Drive tidak valid: '$Drive'" }
 
     Write-Status "CHKDSK online /scan pada $drv`: ..." 'Info'
-
-    # Susun perintah: jalankan chkdsk online scan, lalu exit dengan ERRORLEVEL yang sama
     $scanCmd = "chkdsk $drv`: /scan & exit %ERRORLEVEL%"
     $winStyle = if ($Hidden) { 'Hidden' } else { 'Normal' }
 
-    # Jalankan scan; gunakan cmd.exe agar $LASTEXITCODE mencerminkan ERRORLEVEL proses chkdsk
-    $proc = Start-Process -FilePath 'cmd.exe' `
-                          -ArgumentList "/c $scanCmd" `
-                          -WindowStyle $winStyle `
-                          -Wait -PassThru
+    $null = Start-Process -FilePath 'cmd.exe' -ArgumentList "/c $scanCmd" -WindowStyle $winStyle -Wait -PassThru
     $code = $LASTEXITCODE
 
-    # Interpretasi hasil (berdasarkan dokumentasi CHKDSK)
-    # 0: No errors found; 1: Errors found and fixed (jika /f dipakai); 
-    # 2: Cleanup dilakukan/ditunda (tanpa /f); 3: Tidak dapat memeriksa/memerlukan /f
     switch ($code) {
         0 { Write-Status "Tidak ada error terdeteksi oleh /scan pada $drv`:." 'Green' }
-        1 { Write-Status "Ada error dan telah diperbaiki secara online (bila memungkinkan) pada $drv`:." 'Yellow' }
-        2 { Write-Status "Perlu perbaikan offline (tanpa /f). Pertimbangkan penjadwalan pada reboot." 'Yellow' }
-        3 { Write-Status "Volume memerlukan pemeriksaan/perbaikan offline atau pemeriksaan gagal." 'Yellow' }
-        default { Write-Status "Kode keluar CHKDSK tak dikenal: $code" 'Yellow' }
+        1 { Write-Status "Ada error dan telah diperbaiki secara online (bila memungkinkan) pada $drv`:." 'Warn' }
+        2 { Write-Status "Perlu perbaikan offline (tanpa /f). Pertimbangkan penjadwalan." 'Warn' }
+        3 { Write-Status "Volume memerlukan pemeriksaan/perbaikan offline atau pemeriksaan gagal." 'Warn' }
+        default { Write-Status "Kode keluar CHKDSK tak dikenal: $code" 'Warn' }
     }
 
-    # Keputusan penjadwalan: jadwalkan jika kode 2 atau 3
     $needSchedule = ($code -in 2,3)
-
     if ($needSchedule) {
         $modeLabel = if ($UseSpotFix) { '/spotfix' } else { '/F /R' }
         if ($PSCmdlet.ShouldProcess("$drv`:", "Schedule CHKDSK $modeLabel at next reboot")) {
-            Write-Status "Menjadwalkan CHKDSK $modeLabel pada reboot..." 'Yellow'
-
-            # Siapkan perintah penjadwalan (jawab 'Y' untuk lock system volume)
+            Write-Status "Menjadwalkan CHKDSK $modeLabel pada reboot..." 'Warn'
             $fixArgs = if ($UseSpotFix) { "/spotfix" } else { "/F /R" }
             $schedCmd = "echo Y | chkdsk $drv`: $fixArgs & exit %ERRORLEVEL%"
-
-            # WAJIB elevated saat penjadwalan
-            Start-Process -FilePath 'cmd.exe' `
-                          -ArgumentList "/c $schedCmd" `
-                          -Verb RunAs `
-                          -WindowStyle $winStyle `
-                          -Wait
-
-            # Opsional: baca kembali ERRORLEVEL jika ingin verifikasi
+            $null = Start-Process -FilePath 'cmd.exe' -ArgumentList "/c $schedCmd" -Verb RunAs -WindowStyle $winStyle -Wait
             $scheduleExit = $LASTEXITCODE
             if ($scheduleExit -eq 0) {
-                Write-Status "CHKDSK $modeLabel telah dijadwalkan. Simpan pekerjaan Anda dan lakukan restart untuk memulai pemeriksaan." 'Yellow'
+                Write-Status "CHKDSK $modeLabel telah dijadwalkan. Simpan pekerjaan Anda dan lakukan restart untuk memulai pemeriksaan." 'Warn'
             } else {
                 Write-Status "Penjadwalan CHKDSK mungkin gagal (exit code: $scheduleExit). Coba jalankan sebagai Administrator." 'Error'
             }
         }
-    }
-    else {
+    } else {
         Write-Status 'Tidak perlu penjadwalan CHKDSK.' 'Green'
     }
 }
 
-# ---- Memory diagnostic ----
+# ============ Memory diagnostic ============
 function Invoke-MemoryDiagnostic {
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
     param(
@@ -346,8 +316,7 @@ function Invoke-MemoryDiagnostic {
         [switch]$Hidden
     )
 
-    Write-Status 'Jalankan Windows Memory Diagnostic...'
-
+    Write-Status 'Jalankan Windows Memory Diagnostic...' 'Info'
     $Exe = Join-Path $env:WINDIR 'System32\mdsched.exe'
     if (-not (Test-Path -LiteralPath $Exe)) {
         Write-Error "Tidak menemukan $Exe. Pastikan komponen Windows Memory Diagnostic tersedia."
@@ -360,19 +329,11 @@ function Invoke-MemoryDiagnostic {
     try {
         $target = "Windows Memory Diagnostic ($Mode)"
         if ($PSCmdlet.ShouldProcess($target, "Start-Process $($Exe) $Arg as Administrator")) {
-            Start-Process -FilePath $Exe `
-                          -ArgumentList $Arg `
-                          -Verb RunAs `
-                          -WindowStyle $winStyle `
-                          -ErrorAction Stop
-
+            Start-Process -FilePath $Exe -ArgumentList $Arg -Verb RunAs -WindowStyle $winStyle -ErrorAction Stop
             if ($Mode -eq 'Schedule') {
-                Write-Host "Tes RAM dijadwalkan pada boot berikutnya. Simpan pekerjaan Anda lalu lakukan restart ketika siap."
-                Write-Host "Setelah reboot dan tes selesai, buka Event Viewer > Windows Logs > System, filter Source: MemoryDiagnostics-Results untuk melihat hasil."
-            }
-            else {
-                Write-Host "Tes RAM akan dijalankan segera. Sistem akan restart untuk masuk ke mode pengujian. Simpan pekerjaan Anda sekarang."
-                Write-Host "Sesudah tes dan boot kembali ke Windows, cek Event Viewer > Windows Logs > System, Source: MemoryDiagnostics-Results."
+                Write-Status "Tes RAM dijadwalkan pada boot berikutnya. Cek Event Viewer > Windows Logs > System, Source: MemoryDiagnostics-Results." 'Info'
+            } else {
+                Write-Status "Tes RAM akan berjalan segera (butuh restart). Cek hasil di Event Viewer setelah boot." 'Warn'
             }
         }
     }
@@ -381,13 +342,13 @@ function Invoke-MemoryDiagnostic {
     }
 }
 
-# ---- Auto Restart (diperkuat) ----
+# ============ Restart helpers ============
 function Schedule-AutoRestart {
   param(
     [int]$TimeoutSec = 30,
     [string]$Comment = 'Maintenance Windows selesai.'
   )
-  Write-Status "Jadwalkan restart otomatis dalam $TimeoutSec detik..."
+  Write-Status "Jadwalkan restart otomatis dalam $TimeoutSec detik..." 'Warn'
   $args = "/r /t $TimeoutSec /c `"$Comment`""
   $p = Start-Process -FilePath "$env:WINDIR\System32\shutdown.exe" -ArgumentList $args -Verb RunAs -PassThru -WindowStyle Hidden
   $p.WaitForExit()
@@ -404,7 +365,7 @@ function Abort-Restart {
   }
 }
 
-# ===== Eksekusi =====
+# ============ Eksekusi utama ============
 try {
   Ensure-Admin
   New-Log
@@ -424,66 +385,44 @@ try {
   $tasks = @(
     @{ Name='SFC'; Action={ if (-not $SkipSFC) { $script:SfcExit = Run-SFC } }; Skip=$SkipSFC },
     @{ Name='DISM 3-step (kondisional)'; Action={
-    if (-not $SkipDISM) {
-      $needDism = ($script:SfcExit -ne 0)
+        if (-not $SkipDISM) {
+          $needDism = ($script:SfcExit -ne 0)
 
-      # Pastikan folder CBS ada
-      $cbsDir = Ensure-CbsFolder
+          $cbsDir = Ensure-CbsFolder
+          $candidates = @(
+            Join-Path $cbsDir 'CBS.log'
+            Join-Path $cbsDir 'CBS.persist.log'
+          ) | Where-Object { Test-Path -LiteralPath $_ }
 
-		# Kumpulkan kandidat dan paksa menjadi array
-		$candidates = @(
-			Join-Path $cbsDir 'CBS.log'
-			Join-Path $cbsDir 'CBS.persist.log'
-		) | Where-Object { Test-Path -LiteralPath $_ }
+          if ($null -eq $candidates) { $candidates = @() }
+          elseif ($candidates -isnot [array]) { $candidates = @($candidates) }
 
-		# Normalisasi ke array meskipun $null atau tunggal
-		if ($null -eq $candidates) { $candidates = @() }
-		elseif ($candidates -isnot [array]) { $candidates = @($candidates) }
+          if ($candidates.Count -eq 0) {
+            Write-Status 'CBS log tidak ditemukan; andalkan exit code SFC.' 'Warn'
+          } else {
+            try {
+              $content = ($candidates | ForEach-Object {
+                  Write-Status "Analisis: $_" 'DarkCyan'
+                  Get-Content -LiteralPath $_ -Tail 4000 -Raw -ErrorAction Stop
+              }) -join "`r`n"
 
-		if ($candidates.Count -eq 0) {
-			Write-Status 'CBS log tidak ditemukan; lewati parsing CBS dan andalkan exit SFC.' 'Yellow'
-		} else {
-			try {
-				$content = ($candidates | ForEach-Object {
-					Write-Status "Analisis: $_" 'DarkCyan'
-					Get-Content -LiteralPath $_ -Tail 4000 -Raw -ErrorAction Stop
-				}) -join "`r`n"
-				if ($content -match 'Windows Resource Protection found corrupt files') { $needDism = $true }
-				if ($content -match 'unable to fix') { $needDism = $true }
-				if ($content -match 'successfully repaired') { $needDism = $true }
-			} catch {
-				Write-Status "Gagal membaca CBS log: $($_.Exception.Message)" 'Yellow'
-			}
-		}
+              if ($content -match 'Windows Resource Protection found corrupt files') { $needDism = $true }
+              if ($content -match 'unable to fix') { $needDism = $true }
+              if ($content -match 'successfully repaired') { $needDism = $true }
+            } catch {
+              Write-Status "Gagal membaca CBS log: $($_.Exception.Message)" 'Warn'
+            }
+          }
 
-      # Kandidat log yang sering tersedia
-      $candidates = @(
-        (Join-Path $cbsDir 'CBS.log'),
-        (Join-Path $cbsDir 'CBS.persist.log')
-      ) | Where-Object { Test-Path -LiteralPath $_ }
+          # Opsional: info letak dism.log
+          try {
+            $dismLog = Join-Path $env:WINDIR 'Logs\DISM\dism.log'
+            if (Test-Path -LiteralPath $dismLog) { Write-Status "DISM log: $dismLog" 'DarkCyan' }
+          } catch {}
 
-      if (-not $candidates -or $candidates.Count -eq 0) {
-        Write-Status 'CBS log tidak ditemukan; lewati parsing CBS dan andalkan exit SFC.' 'Yellow'
-      } else {
-        try {
-          # Gabungkan tail dari masing-masing file untuk indikasi korupsi
-          $content = ($candidates | ForEach-Object {
-              Write-Status "Analisis: $_" 'DarkCyan'
-              Get-Content -LiteralPath $_ -Tail 4000 -Raw -ErrorAction Stop
-          }) -join "`r`n"
-
-          if ($content -match 'Windows Resource Protection found corrupt files') { $needDism = $true }
-          if ($content -match 'unable to fix') { $needDism = $true }
-          if ($content -match 'successfully repaired') { $needDism = $true }
-        } catch {
-          Write-Status "Gagal membaca CBS log: $($_.Exception.Message)" 'Yellow'
+          if ($needDism) { Run-DISM-3 } else { Write-Status 'SFC OK; DISM dilewati (tidak diperlukan)' 'Green' }
         }
-      }
-
-      if ($needDism) { Run-DISM-3 } else { Write-Status 'SFC OK; DISM dilewati (tidak diperlukan)' }
-    }
-  }; Skip=$SkipDISM },
-
+      }; Skip=$SkipDISM },
     @{ Name='Reset Windows Update'; Action={ if (-not $SkipWUReset) { Reset-WindowsUpdate } }; Skip=$SkipWUReset },
     @{ Name='Network Fix'; Action={ if (-not $SkipNetworkFix) { Flush-DNS; Reset-Winsock } }; Skip=$SkipNetworkFix },
     @{ Name='Disk Cleanup'; Action={ if (-not $SkipCleanup) { Run-Cleanup } }; Skip=$SkipCleanup },
@@ -508,7 +447,7 @@ try {
         Write-Status ($t.Name + ' -> [OK]') 'Green'
         [void]$executed.Add("[$i/$TotalSteps] $($t.Name) -> OK")
       } catch {
-        Write-Status ($t.Name + ' -> [FAILED] ' + $_.Exception.Message) 'Red'
+        Write-Status ($t.Name + ' -> [FAILED] ' + $_.Exception.Message) 'Error'
         [void]$executed.Add("[$i/$TotalSteps] $($t.Name) -> FAILED: $($_.Exception.Message)")
       }
     }
@@ -523,7 +462,7 @@ try {
         Schedule-AutoRestart -TimeoutSec 30 -Comment 'Maintenance Windows selesai.'
         Start-Sleep -Seconds 2
       } catch {
-        Write-Status 'Fallback: Restart-Computer -Force dalam 30 detik' 'DarkYellow'
+        Write-Status 'Fallback: Restart-Computer -Force dalam 30 detik' 'Warn'
         Start-Sleep -Seconds 30
         Restart-Computer -Force
       }
@@ -533,7 +472,7 @@ try {
       try {
         Schedule-AutoRestart -TimeoutSec 30 -Comment 'Maintenance Windows selesai.'
       } catch {
-        Write-Status 'Gagal menjadwalkan via shutdown.exe, gunakan fallback.' 'DarkYellow'
+        Write-Status 'Gagal menjadwalkan via shutdown.exe, gunakan fallback.' 'Warn'
         Start-Sleep -Seconds 30
         Restart-Computer -Force
         throw
