@@ -1,5 +1,5 @@
 <#
-Version: 1.3.2.0
+Version: 1.3.3.0
 #>
 
 # ============ Header & Setup ============
@@ -135,9 +135,10 @@ function Invoke-External {
   }
 }
 
-# ============ Integrity (SFC/DISM) ============
+# ===================== SFC =====================
 function Run-SFC {
   Write-Status 'SFC /Scannow...' 'Info'
+
   $psi = New-Object System.Diagnostics.ProcessStartInfo
   $psi.FileName  = 'cmd.exe'
   $psi.Arguments = '/c sfc.exe /scannow'
@@ -145,44 +146,53 @@ function Run-SFC {
   $psi.RedirectStandardOutput = $true
   $psi.RedirectStandardError  = $true
   $psi.CreateNoWindow = $true
+
   $p = [System.Diagnostics.Process]::Start($psi)
   $stdout = $p.StandardOutput.ReadToEnd()
   $stderr = $p.StandardError.ReadToEnd()
   $p.WaitForExit()
 
   $outFile = Join-Path $env:TEMP ("sfc_out_{0}.log" -f (Get-Date -Format 'yyyyMMdd_HHmmss'))
+  $script:SfcOutFile = $outFile
   try {
     $stdout | Out-File -FilePath $outFile -Encoding UTF8 -Force
     if ($stderr) { $stderr | Out-File -FilePath $outFile -Append -Encoding UTF8 }
     Write-Status ("Log SFC -> " + $outFile) 'DarkCyan'
   } catch {}
 
-  $foundCorrupt = $false
-  if ($stdout -match 'Windows Resource Protection found corrupt files') { $foundCorrupt = $true }
-  if ($stdout -match 'unable to fix' -or $stdout -match 'successfully repaired') { $foundCorrupt = $true }
-  if ($foundCorrupt) { return 1 } else { return $p.ExitCode }
+  return $p.ExitCode
+}
+
+function Invoke-Dism-Step {
+    param(
+        [Parameter(Mandatory)][string]$Args,   # '/Online /Cleanup-Image /ScanHealth'
+        [Parameter(Mandatory)][string]$Label
+    )
+    Write-Status "DISM $Label..." 'Info'
+    $proc = Start-Process -FilePath 'dism.exe' -ArgumentList $Args -WindowStyle Hidden -Wait -PassThru
+    $code = $proc.ExitCode
+    $tail = Get-DismTailInfo
+    if ($code -eq 0) {
+        Write-Status "[$Label] OK (exit 0)" 'Green'
+    } else {
+        Write-Status "[$Label] ExitCode: $code" 'Yellow'
+    }
+    Write-Status ("Log DISM (tail):`n" + $tail) 'DarkCyan'
+    return $code
 }
 
 function Run-DISM-3 {
-  Write-Status 'DISM CheckHealth...' 'Info'
-  Invoke-External dism.exe '/Online /Cleanup-Image /CheckHealth'
-  Write-Status 'DISM ScanHealth...' 'Info'
-  Invoke-External dism.exe '/Online /Cleanup-Image /ScanHealth'
-  Write-Status 'DISM RestoreHealth...' 'Info'
-  Invoke-External dism.exe '/Online /Cleanup-Image /RestoreHealth'
-}
+    $t0 = Get-Date
+    $e1 = Invoke-Dism-Step -Args '/Online /Cleanup-Image /CheckHealth'    -Label 'CheckHealth'
+    $e2 = Invoke-Dism-Step -Args '/Online /Cleanup-Image /ScanHealth'     -Label 'ScanHealth'
+    $e3 = Invoke-Dism-Step -Args '/Online /Cleanup-Image /RestoreHealth'  -Label 'RestoreHealth'
+    $dur = (Get-Date) - $t0
 
-function Ensure-CbsFolder {
-    $cbsDir = Join-Path $env:WINDIR 'Logs\CBS'
-    if (-not (Test-Path -LiteralPath $cbsDir)) {
-        try {
-            New-Item -ItemType Directory -Path $cbsDir -Force | Out-Null
-            Write-Status "Membuat folder: $cbsDir" 'DarkCyan'
-        } catch {
-            Write-Status "Gagal membuat folder CBS: $($_.Exception.Message)" 'Warn'
-        }
+    if ($e3 -eq 0) {
+        Write-Status ("DISM selesai tanpa error. Durasi: {0:N1} menit" -f $dur.TotalMinutes) 'Green'
+    } else {
+        Write-Status ("DISM selesai dengan error (exit $e3). Lihat ringkasan log di atas. Durasi: {0:N1} menit" -f $dur.TotalMinutes) 'Yellow'
     }
-    return $cbsDir
 }
 
 # ============ Windows Update reset ============
@@ -443,20 +453,13 @@ function Test-SFCIndicatesCorruption {
 }
 
   $tasks = @(
-    @{ Name='SFC'; Action={ if (-not $SkipSFC) { $script:SfcExit = Run-SFC } }; Skip=$SkipSFC },
-    @{ Name='DISM 3-step (kondisional)'; Action={
-        if (-not $SkipDISM) {
-			$needDism = ($script:SfcExit -ne 0)
-			try {
-				if (-not $needDism) {
-					if (Test-SFCIndicatesCorruption -TailLines 4000) { $needDism = $true }
-				}
-			} catch {
-				Write-Status ("Gagal evaluasi CBS.log: " + $_.Exception.Message) 'Warn'
-			}
-			if ($needDism) { Run-DISM-3 } else { Write-Status 'SFC OK; DISM dilewati (tidak diperlukan)' 'Green' }
-				}
-			  }; Skip=$SkipDISM },
+	@{ Name='SFC'; Action={ if (-not $SkipSFC) { $script:SfcExit = Run-SFC } }; Skip=$SkipSFC },
+	@{ Name='DISM 3-step'; Action={
+		  if (-not $SkipDISM) {
+			  Write-Status 'DISM akan dijalankan (unconditional).' 'Info'
+			  Run-DISM-3
+		  }
+		}; Skip=$SkipDISM },
     @{ Name='Reset Windows Update'; Action={ if (-not $SkipWUReset) { Reset-WindowsUpdate } }; Skip=$SkipWUReset },
     @{ Name='Network Fix'; Action={ if (-not $SkipNetworkFix) { Flush-DNS; Reset-Winsock } }; Skip=$SkipNetworkFix },
     @{ Name='Disk Cleanup'; Action={ if (-not $SkipCleanup) { Run-Cleanup } }; Skip=$SkipCleanup },
