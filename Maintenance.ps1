@@ -163,6 +163,20 @@ function Run-SFC {
   return $p.ExitCode
 }
 
+function Get-DismTailInfo {
+    param([int]$TailChars = 400000)
+    $log = Join-Path $env:WINDIR 'Logs\DISM\dism.log'
+    if (-not (Test-Path -LiteralPath $log)) { return '[dism.log not found]' }
+    try {
+        $txt = Get-Content -LiteralPath $log -Raw -ErrorAction Stop
+        if ($txt.Length -gt $TailChars) { $txt = $txt.Substring($txt.Length - $TailChars) }
+        $lines = $txt -split "\r?\n"
+        $keys = 'CheckHealth','ScanHealth','RestoreHealth','Error:','FAILED','successfully','reboot'
+        $hit = $lines | Where-Object { $_ -match ($keys -join '|') } | Select-Object -Last 5
+        if ($hit) { return ($hit -join "`r`n") } else { return '[no key lines in tail]' }
+    } catch { return "[read dism.log failed] $($_.Exception.Message)" }
+}
+
 function Invoke-Dism-Step {
     param(
         [Parameter(Mandatory)][string]$Args,   # '/Online /Cleanup-Image /ScanHealth'
