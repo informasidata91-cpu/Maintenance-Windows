@@ -209,6 +209,108 @@ function Run-DISM-3 {
     }
 }
 
+# ============ Clear log CBS dan DISM ============
+function Wait-ServiceStateLimited {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][ValidateSet('Running','Stopped')][string]$TargetState,
+        [int]$MaxTries = 10,
+        [int]$SleepMs = 1000
+    )
+    $tries = 0
+    while ($tries -lt $MaxTries) {
+        $svc = Get-Service -Name $Name -ErrorAction SilentlyContinue
+        if ($null -ne $svc -and $svc.Status -eq $TargetState) { return $true }
+        $tries++
+        Write-Status ("Waiting for service '{0}' to {1}... ({2}/{3})" -f $Name, $TargetState.ToLower(), $tries, $MaxTries) 'DarkYellow'
+        Start-Sleep -Milliseconds $SleepMs
+    }
+    return $false
+}
+
+function Clear-CbsAndDismLogs {
+    [CmdletBinding(SupportsShouldProcess)]
+    param(
+        [switch]$Backup,
+        [int]$TailKeepDays = 7
+    )
+
+    $cbsDir  = Join-Path $env:WINDIR 'Logs\CBS'
+    $dismDir = Join-Path $env:WINDIR 'Logs\DISM'
+
+    Write-Status 'Membersihkan CBS.log & DISM.log...' 'Info'
+
+    # Hentikan layanan yang menulis ke log (minimal)
+    foreach($svc in 'trustedinstaller','wuauserv'){
+        try { Stop-Service $svc -Force -ErrorAction SilentlyContinue } catch {}
+    }
+	# Stop aman (jika tidak sibuk)
+		try { Stop-Service TrustedInstaller -Force -ErrorAction SilentlyContinue } catch {}
+		try { Stop-Service wuauserv        -Force -ErrorAction SilentlyContinue } catch {}
+	# PATCH: batasi pesan menunggu stop maksimal 10 kali
+    [void](Wait-ServiceStateLimited -Name 'TrustedInstaller' -TargetState 'Stopped' -MaxTries 10 -SleepMs 1000)
+    [void](Wait-ServiceStateLimited -Name 'wuauserv'        -TargetState 'Stopped' -MaxTries 10 -SleepMs 1000)
+
+    # Backup opsional
+    if ($Backup) {
+        $stamp = Get-Date -Format 'yyyyMMdd_HHmmss'
+        $zipPath = Join-Path $env:TEMP "logs_backup_$stamp.zip"
+        try {
+            $files = @()
+            if (Test-Path $cbsDir)  { $files += Get-ChildItem $cbsDir -File -ErrorAction SilentlyContinue }
+            if (Test-Path $dismDir) { $files += Get-ChildItem $dismDir -File -ErrorAction SilentlyContinue }
+            if ($files) { Compress-Archive -Path $files.FullName -DestinationPath $zipPath -Force }
+            if (Test-Path $zipPath) { Write-Status "Backup log -> $zipPath" 'DarkCyan' }
+        } catch {
+            Write-Status "Gagal backup log: $($_.Exception.Message)" 'Warn'
+        }
+    }
+
+    # Rotasi & bersihkan CBS
+    try {
+        if (Test-Path $cbsDir) {
+            Get-ChildItem $cbsDir -File -ErrorAction SilentlyContinue | ForEach-Object {
+                if ($_.Name -in 'CBS.log','CBS.persist.log') {
+                    try { Remove-Item $_.FullName -Force -ErrorAction Stop } catch {}
+                } else {
+                    if ($_.LastWriteTime -lt (Get-Date).AddDays(-$TailKeepDays)) {
+                        try { Remove-Item $_.FullName -Force -ErrorAction Stop } catch {}
+                    }
+                }
+            }
+        }
+    } catch {
+        Write-Status "CBS cleanup gagal: $($_.Exception.Message)" 'Warn'
+    }
+
+    # Rotasi & bersihkan DISM
+    try {
+        if (Test-Path $dismDir) {
+            Get-ChildItem $dismDir -File -ErrorAction SilentlyContinue | ForEach-Object {
+                if ($_.Name -in 'dism.log') {
+                    try { Remove-Item $_.FullName -Force -ErrorAction Stop } catch {}
+                } else {
+                    if ($_.LastWriteTime -lt (Get-Date).AddDays(-$TailKeepDays)) {
+                        try { Remove-Item $_.FullName -Force -ErrorAction Stop } catch {}
+                    }
+                }
+            }
+        }
+    } catch {
+        Write-Status "DISM cleanup gagal: $($_.Exception.Message)" 'Warn'
+    }
+	# Mulai kembali layanan
+	try { Start-Service wuauserv        -ErrorAction SilentlyContinue } catch {}
+	try { Start-Service TrustedInstaller -ErrorAction SilentlyContinue } catch {}
+    
+    # PATCH: batasi pesan menunggu start maksimal 10 kali
+    [void](Wait-ServiceStateLimited -Name 'wuauserv'        -TargetState 'Running' -MaxTries 10 -SleepMs 1000)
+    [void](Wait-ServiceStateLimited -Name 'TrustedInstaller' -TargetState 'Running' -MaxTries 10 -SleepMs 1000)
+
+    Write-Status 'CBS.log & DISM.log dibersihkan.' 'Green'
+}
+
 # ============ Windows Update reset ============
 function Reset-WindowsUpdate {
   Write-Status 'Reset Windows Update components...' 'Info'
@@ -470,10 +572,13 @@ function Test-SFCIndicatesCorruption {
 	@{ Name='SFC'; Action={ if (-not $SkipSFC) { $script:SfcExit = Run-SFC } }; Skip=$SkipSFC },
 	@{ Name='DISM 3-step'; Action={
 		  if (-not $SkipDISM) {
-			  Write-Status 'DISM akan dijalankan (unconditional).' 'Info'
+			  Write-Status 'DISM akan dijalankan.' 'Info'
 			  Run-DISM-3
 		  }
 		}; Skip=$SkipDISM },
+	@{ Name='Cleanup CBS/DISM logs'; Action={
+			Clear-CbsAndDismLogs -Backup -TailKeepDays 7
+		}; Skip=$false },
     @{ Name='Reset Windows Update'; Action={ if (-not $SkipWUReset) { Reset-WindowsUpdate } }; Skip=$SkipWUReset },
     @{ Name='Network Fix'; Action={ if (-not $SkipNetworkFix) { Flush-DNS; Reset-Winsock } }; Skip=$SkipNetworkFix },
     @{ Name='Disk Cleanup'; Action={ if (-not $SkipCleanup) { Run-Cleanup } }; Skip=$SkipCleanup },
