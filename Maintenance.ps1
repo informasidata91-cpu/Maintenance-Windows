@@ -1,7 +1,39 @@
+﻿##[Ps1 To Exe]
+##
+##Kd3HDZOFADWE8uO1
+##Nc3NCtDXTlaDjoHW8T1n8XfjQ2ElesCVuLikwc+1/OWM
+##Kd3HFJGZHWLWoLaVvnQnhQ==
+##LM/RF4eFHHGZ7/K1
+##K8rLFtDXTiW5
+##OsHQCZGeTiiZ4tI=
+##OcrLFtDXTiW5
+##LM/BD5WYTiiZ4tI=
+##McvWDJ+OTiiZ4tI=
+##OMvOC56PFnzN8u+Vs1Q=
+##M9jHFoeYB2Hc8u+Vs1Q=
+##PdrWFpmIG2HcofKIo2QX
+##OMfRFJyLFzWE8uO1
+##KsfMAp/KUzWI0g==
+##OsfOAYaPHGbQvbyVvnQlqxugEiZ7Dg==
+##LNzNAIWJGmPcoKHc7Do3uAu8DDhlPovL2Q==
+##LNzNAIWJGnvYv7eVvnRa5ELgVm0lb8uYvPaQzY+48P3/2w==
+##M9zLA5mED3nfu77Q7TV64AuzAkUqZ8uPvLimyoK5se/0vkU=
+##NcDWAYKED3nfu77Q7TV64AuzAkUqZ8uPvLimyoK5nw==
+##OMvRB4KDHmHQvbyVvnRA7EXqTX84LuiasLizwY+98enp+xDNQJYdXU0X
+##P8HPFJGEFzWE8tI=
+##KNzDAJWHD2fS8u+VxzVj5AvHTG4kfMiaqr8lIEPc
+##P8HSHYKDCX3N8u+VQf03txu8FygPb9Ga+Z+pwo6u8uv/sqc9i9RUaFh71jv1A0OpSrIAUOYQpscUUVNK
+##LNzLEpGeC3fMu77Ro2k3hQ==
+##L97HB5mLAnfMu77Ro2k3hQ==
+##P8HPCZWEGmaZ7/L39j178Qv4S2lrXsqMvKSUzISw86SsnCzNQY8WExR/gj3sFxHyFvUbQf0Atp8SWhBlJvwN7aDdGvSgQaMek7ouJuaes9I=
+##L8/UAdDXTlGDjpXc9zxi53fDQ2ElesCVuLikwcyL9uTotDLKdbcVQFpjkyf9Cki4F/cKUJU=
+##Kc/BRM3KXxU=
+##
+##
+##fd6a9f26a06ea3bc99616d4851b372ba
 <#
-Version: 1.3.3.0
+Version: 2.0.0.0
 #>
-
 # ============ Header & Setup ============
 [CmdletBinding()]
 param(
@@ -58,6 +90,8 @@ function Ensure-Admin {
     exit
   }
 }
+
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 
 # ============ Logging & Status ============
 function Write-Status {
