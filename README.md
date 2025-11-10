@@ -7,46 +7,59 @@
 ![Maintenance](https://img.shields.io/badge/Auto%20Maintenance-Enabled-green.svg)
 ________________________________________
 ## Deskripsi  
-Skrip ini dirancang untuk melakukan perawatan sistem Windows secara otomatis dan silent. Menggabungkan beberapa perintah penting untuk memastikan integritas file sistem, kesehatan image Windows, jaringan, dan memori. Setelah skrip selesai, komputer akan melakukan restart otomatis. Skrip ini cocok untuk administrator atau pengguna yang ingin melakukan maintenance rutin tanpa interaksi manual.  
+Skrip ini melakukan perawatan sistem Windows secara otomatis dan silent. Mencakup SFC, DISM 3-langkah, pembersihan log CBS/DISM, reset komponen Windows Update, perbaikan jaringan (Flush DNS \& Winsock reset), cleanup komprehensif termasuk StartComponentCleanup dan ekstra cache/log, optimasi storage (Defrag/TRIM), CHKDSK online dengan penjadwalan perbaikan saat reboot jika diperlukan, serta Windows Memory Diagnostic. Skrip melakukan auto-elevate ke Administrator, menyetel ExecutionPolicy scope proses ke Bypass, dan mencatat transcript ke C:\MaintenanceLog.txt. 
 ________________________________________
 ## Fitur Utama  
 
-1. **DISM (Deployment Image Servicing and Management) – 3-Step**  
-   - /CheckHealth: Memeriksa apakah image Windows rusak.  
-   - /ScanHealth: Melakukan scan lebih mendalam untuk mendeteksi kerusakan image.  
-   - /RestoreHealth: Memperbaiki kerusakan image secara otomatis.  
-   Langkah ini memastikan sistem Windows tetap sehat dan siap menerima update.  
+1. DISM (3 langkah)
+    - /CheckHealth, /ScanHealth, /RestoreHealth untuk memeriksa dan memperbaiki image Windows.
+    - Menyediakan ringkasan tail dism.log untuk visibilitas cepat hasil DISM.
+2. System File Checker (SFC)
+    - Menjalankan sfc /scannow dan menyimpan output ke berkas log sementara di %TEMP%, dengan path dicatat pada output.
+3. Reset Windows Update components
+    - Menghentikan layanan BITS, wuauserv, cryptsvc, msiserver.
+    - Merename SoftwareDistribution dan catroot2 dengan suffix timestamp, lalu menyalakan kembali layanan.
+4. Network fixes
+    - Flush DNS cache dan netsh winsock reset.
+5. Disk cleanup
+    - Menghapus folder TEMP (user dan system), menjalankan DISM /StartComponentCleanup, dan Clear-RecycleBin.
+6. Extra cleanup
+    - Menghapus folder cache: SoftwareDistribution\Download, DeliveryOptimization, Logs\CBS, Logs\DISM, Prefetch.
+    - Menghapus Windows.old; jika terkunci, fallback ke takeown/icacls kemudian rmdir.
+7. Optimasi storage
+    - Menganalisis volume tetap, mendeteksi SSD vs HDD, menjalankan ReTrim untuk SSD atau Defrag untuk HDD.
+8. CHKDSK
+    - Menjalankan chkdsk /scan dan menginterpretasi exit code.
+    - Jika perlu, menjadwalkan perbaikan pada reboot berikutnya menggunakan /spotfix atau /F /R.
+9. Windows Memory Diagnostic
+    - Menjadwalkan atau menjalankan segera melalui mdsched.exe dengan elevasi; hasil dapat dilihat di Event Viewer.
+10. Logging otomatis
+    - Start-Transcript ke C:\MaintenanceLog.txt, menutup transcript dengan ringkasan durasi eksekusi.
+11. Restart otomatis
+    - Menjadwalkan restart menggunakan shutdown.exe (default 30 detik, dapat dibatalkan), dengan fallback Restart-Computer bila perlu.  
 
-2. **System File Checker (SFC)**  
-   Memindai dan memperbaiki file sistem Windows yang rusak atau hilang. SFC memastikan semua file inti Windows berada dalam kondisi baik sehingga mencegah error, crash, dan gangguan layanan.  
+____________________________________  
+## Parameter
 
-3. **Reset Windows Update Components**  
-   Menghentikan layanan Windows Update, membersihkan cache, dan menghidupkan kembali layanan tersebut. Proses ini penting untuk mengatasi masalah pembaruan Windows yang sering gagal akibat cache atau metadata yang bermasalah.  
+Tersedia switch parameter untuk mengontrol langkah:
 
-4. **Network Fixes (Flush DNS & Reset Winsock)**  
-   Membersihkan cache DNS untuk memperbaiki masalah konektivitas atau resolusi nama domain, serta mereset konfigurasi jaringan Windows (Winsock) untuk menyelesaikan masalah koneksi.  
+- -Silent: Nonaktifkan prompt informasi awal.
+- -SkipDISM: Lewati langkah DISM 3-langkah.
+- -SkipSFC: Lewati SFC.
+- -SkipWUReset: Lewati reset komponen Windows Update.
+- -SkipCleanup: Lewati cleanup umum (TEMP, StartComponentCleanup, Recycle Bin).
+- -SkipDefrag: Lewati Optimize-Drives (Defrag/TRIM).
+- -SkipChkdsk: Lewati CHKDSK.
+- -SkipNetworkFix: Lewati Flush DNS dan Winsock reset.
+- -SkipMemoryDiag: Lewati Windows Memory Diagnostic.
+- -SkipExtraCleanup: Lewati cleanup ekstra (Download, DeliveryOptimization, CBS/DISM logs, Prefetch, Windows.old).
+- -NoRestart: Menonaktifkan restart otomatis di akhir.
+- -ForceAutoRestart: Memaksa restart otomatis tanpa prompt.
 
-5. **Disk Cleanup**  
-   Membersihkan file-file sementara, komponen usang, dan mengosongkan Recycle Bin. Termasuk pembersihan ekstra seperti cache Windows Update, Delivery Optimization, log CBS/DISM, Prefetch, dan Windows.old. Tujuannya adalah mengosongkan ruang penyimpanan, meningkatkan performa sistem, serta menjaga kestabilan Windows.  
+Catatan:
 
-6. **Disk Cleanup Drive C: (opsional)**  
-   Menjalankan pembersihan khusus pada drive C: untuk menghapus file sisa dan temporary yang tidak terhapus pada langkah sebelumnya.  
-
-7. **Optimize Volumes (Defrag/TRIM)**  
-   Mengoptimalkan drive dengan menjalankan defragmentasi pada HDD dan TRIM pada SSD. Langkah ini bertujuan menjaga performa penyimpanan dan memperpanjang umur perangkat.  
-
-8. **CHKDSK**  
-   Memeriksa integritas drive C: dan secara otomatis menjadwalkan perbaikan bila ditemukan masalah. Fitur ini membantu mendeteksi dan memperbaiki kerusakan pada sistem berkas dan sektor disk.  
-
-9. **Windows Memory Diagnostic**  
-   Menjadwalkan Windows Memory Diagnostic untuk dijalankan saat restart berikutnya. Pemeriksaan ini bertujuan mendeteksi masalah pada RAM yang dapat menyebabkan crash atau error acak.  
-
-10. **Logging Otomatis**  
-    Seluruh output dan status eksekusi dicatat ke file log utama di `C:\MaintenanceLog.txt`. Fitur ini memudahkan audit, troubleshooting, dan dokumentasi hasil maintenance.  
-
-11. **Restart Otomatis**  
-    Setelah semua langkah selesai, komputer akan restart dalam 30 detik dengan pesan: "_Maintenance Windows selesai. Komputer akan restart otomatis._" Langkah ini memastikan semua perubahan dan perbaikan diterapkan dengan benar.    
-________________________________________
+- Skrip meneruskan parameter saat auto-elevate sehingga perilaku konsisten setelah relaunch.  
+____________________________________
 ## Cara Penggunaan  
 1.	Simpan skrip sebagai Maintenance.ps1.  
 2.	Jalankan PowerShell sebagai Administrator.  
@@ -62,6 +75,24 @@ ________________________________________
     ```       
 4.	Tunggu proses selesai — skrip akan menampilkan log di layar dan di C:\MaintenanceLog.txt.  
 5.	Komputer akan otomatis restart untuk menyelesaikan CHKDSK dan Memory Diagnostic.  
+________________________________________  
+## Urutan Eksekusi
+
+- Ensure-Admin (auto-elevate + ExecutionPolicy scope proses Bypass)
+- Logging: Start-Transcript
+- Informasi awal (kecuali -Silent)
+- SFC
+- DISM 3-step
+- Cleanup CBS/DISM logs (opsi backup dan rotasi/hapus log lama)
+- Reset Windows Update
+- Network Fix
+- Disk Cleanup
+- Extra Cleanup
+- Optimize Drives
+- CHKDSK (scan online dan jadwalkan jika perlu)
+- Memory Diagnostic
+- Ringkasan maintenance
+- Restart otomatis (kecuali -NoRestart)  
 ________________________________________  
 ## Catatan Penting  
 1. Pastikan PowerShell dijalankan dengan hak administrator, jika tidak beberapa langkah seperti DISM dan CHKDSK akan gagal.  
@@ -172,4 +203,4 @@ Halaman Releases adalah pusat distribusi versi aplikasi ini yang dikemas berdasa
 
 --- 
 ## Disclaimer  
-Skrip ini dibuat untuk perawatan rutin sistem. Gunakan dengan hati-hati pada komputer yang sedang digunakan untuk pekerjaan penting karena akan restart otomatis. Backup data penting selalu disarankan sebelum melakukan perawatan sistem.  
+Skrip ini dibuat untuk perawatan rutin. Gunakan dengan hati-hati pada komputer yang sedang digunakan untuk pekerjaan penting karena akan restart otomatis. Backup data penting selalu disarankan sebelum melakukan perawatan sistem.  
